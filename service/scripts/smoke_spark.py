@@ -1,13 +1,9 @@
-# /// script
-# requires-python = ">=3.11"
-# dependencies = ["openai>=1.40"]
-# ///
-"""Step 0 smoke test: prove the Meta Model API works for what the Spark investigator needs.
+"""Step 0 smoke test: prove a provider works for what the Spark investigator needs.
 
-Checks: (1) plain chat, (2) a tool-calling round trip, (3) structured JSON output.
+Checks: (0) the model is listed, (1) plain chat, (2) a tool-calling round trip, (3) structured JSON output.
 
 Run from the repo root:
-    uv run --env-file .env service/scripts/smoke_spark.py [--model muse-spark-1.3]
+    uv run --env-file .env service/scripts/smoke_spark.py [--provider meta|baseten] [--model ID]
 """
 
 import argparse
@@ -19,8 +15,11 @@ import time
 
 from openai import OpenAI
 
-BASE_URL = "https://api.meta.ai/v1"
-DEFAULT_MODEL = "muse-spark-1.3-contributor"  # cheaper; fine for dev on public packages
+# name: (base URL, API key env var, default model)
+PROVIDERS = {
+    "meta": ("https://api.meta.ai/v1", "META_API_KEY", "muse-spark-1.3-contributor"),  # contributor is cheaper; fine for dev on public packages
+    "baseten": ("https://inference.baseten.co/v1", "BASETEN_API_KEY", "meta-models/muse-spark-open-1026"),  # open weights
+}
 
 DECODE_TOOL = {
     "type": "function",
@@ -48,6 +47,12 @@ VERDICT_SCHEMA = {
     "required": ["verdict", "confidence", "reason"],
     "additionalProperties": False,
 }
+
+
+def check_model_listed(client, model):
+    ids = [m.id for m in client.models.list()]
+    related = [i for i in ids if "muse" in i.lower() or "meta" in i.lower()]
+    return model in ids, f"{len(ids)} models listed; muse/meta ones: {related[:10]}", None
 
 
 def check_chat(client, model):
@@ -96,20 +101,24 @@ def check_structured(client, model):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--provider", choices=PROVIDERS, default="meta")
+    parser.add_argument("--model", help="defaults to the provider's default model")
     args = parser.parse_args()
 
-    if not os.environ.get("META_API_KEY"):
-        sys.exit("META_API_KEY is not set. Put it in .env and run with: uv run --env-file .env ...")
+    base_url, key_var, default_model = PROVIDERS[args.provider]
+    model = args.model or default_model
+    if not os.environ.get(key_var):
+        sys.exit(f"{key_var} is not set. Put it in .env and run with: uv run --env-file .env ...")
 
-    client = OpenAI(base_url=BASE_URL, api_key=os.environ["META_API_KEY"])
-    print(f"model: {args.model}  base_url: {BASE_URL}\n")
+    client = OpenAI(base_url=base_url, api_key=os.environ[key_var])
+    print(f"provider: {args.provider}  model: {model}  base_url: {base_url}\n")
 
+    checks = [("model listed", check_model_listed), ("chat", check_chat), ("tool calling", check_tool_call), ("structured output", check_structured)]
     failed = 0
-    for name, check in [("chat", check_chat), ("tool calling", check_tool_call), ("structured output", check_structured)]:
+    for name, check in checks:
         start = time.monotonic()
         try:
-            ok, detail, usage = check(client, args.model)
+            ok, detail, usage = check(client, model)
         except Exception as exc:  # report every check, even if one blows up
             ok, detail, usage = False, f"{type(exc).__name__}: {exc}", None
         secs = time.monotonic() - start

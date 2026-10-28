@@ -7,12 +7,47 @@ A running record of what we tested, what we found, and how it changes the build.
 | Step 0 item | Status | Notes |
 |---|---|---|
 | Meta Model API credits | ✅ **$150 received** | Oct 27 |
-| Modal and Baseten credits | ⏳ Requested | Waiting for approval |
+| Baseten credits | ✅ **Received** | Oct 27 |
+| **Baseten open weights (`muse-spark-open-1026`): chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 4 checks pass, faster than the Meta API. See below |
+| Modal credits | 🟡 Approved | Oct 28: approved, credits being processed |
+| **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
 | Muse Code installed and signed in | ✅ Done | v1.4.13, at `~/.local/bin/muse` |
 | **Muse Code hook can block and message the agent** | ✅ **Proven** | Oct 27. See below |
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
 | One Modal sandbox command | ⏳ Waiting | Needs a Modal account and credits |
 | Public GitHub repo | ✅ Done | `Amoh-Ntim/bawabu`, created after kickoff |
+
+---
+
+## 2026-10-28 (Wed): Modal sandbox test, Step 0 complete
+
+### Result
+
+**Modal Sandboxes can do everything the plan's sandbox design (section 7.3) needs:** run Node, block the real internet, and trace what package code does with `strace -f`. With this, **all Step 0 proofs are done.**
+
+Ran `uv run sandbox/scripts/smoke_modal.py`: one sandbox (Debian slim with nodejs, strace and curl), created with `block_network=True`.
+
+| Check | Result | Time | Detail |
+|---|---|---|---|
+| Sandbox created | ✅ | 2.7 s | Image already built (the first run built it) |
+| Node runs | ✅ PASS | 3.2 s | `node v18.20.4` |
+| Network blocked | ✅ PASS | 1.3 s | `curl: (6) Could not resolve host: registry.npmjs.org`. Even DNS is blocked |
+| strace works | ✅ PASS | 4.2 s | A Node script started `/bin/sh` and read a planted `.npmrc` containing a canary token. `strace -f` recorded both the `execve /bin/sh` and the open of `/root/.npmrc` (71 trace lines) |
+
+The test ran twice. The first run happened by accident during an import check, because `modal setup` was already done. Both runs passed, and each cost a fraction of a cent.
+
+**What we learned:**
+- **The biggest Step 5 risk is cleared: `strace -f` works inside Modal's gVisor sandbox.** It catches spawned processes and file reads, including in child processes. That's what the evidence report is built on (files read, processes spawned).
+- **`block_network=True` blocks DNS as well, not just connections.** For the plan's fake DNS and catch-all HTTP sink, both have to run **inside** the sandbox (for example a local DNS server or `/etc/hosts` pointing every domain at a local HTTP server). Nothing can reach an outside sink.
+- **The sandbox is ready in about 4–6 s** (create plus first command). That's small next to Spark's investigation time.
+- **Debian's Node is old (v18).** For Step 5, use a current Node image (20 or 22) so packages behave as they do on a developer's machine.
+
+### Other findings today
+
+- **Modal approved.** Credits are being processed. `modal setup` is done (token in `~/.modal.toml`, outside the repo).
+- **Python project for the repo:** the root `pyproject.toml` (deps `modal`, `openai`), Python pinned to 3.13 (`.python-version`), `uv sync` created `.venv` and `uv.lock`. This fixed VS Code's "import could not be resolved" warning on `import modal`, which happened because the editor's Python didn't have the libraries installed. The scripts no longer carry their own dependency headers. `.vscode/settings.json` (local only, gitignored) points the editor at `.venv`.
+- **Install Modal with `uv`, not `pip`.** Modal's instructions say `pip install modal` and `python3 -m modal setup`, but Homebrew's Python blocks `pip install` (`externally-managed-environment`). Use **`uvx modal setup`** for the login, and `uv run sandbox/scripts/smoke_modal.py`, which installs `modal` from the script header automatically. Modal client version: 1.6.3.
+- **PATH fixed:** Homebrew (`/opt/homebrew/bin`) is now on PATH, and `python3`, `node`, `npm` and `uv` resolve normally. Yesterday's workaround of using full paths is no longer needed.
 
 ---
 
@@ -105,6 +140,24 @@ We ran `uv run --env-file .env service/scripts/smoke_spark.py` on the model `mus
 - **Spark judges against the task without being told to.** Its reason ("no legitimate function for a date-picker") is the "task-aware judgment" the plan lists as a differentiator.
 - **Calls are slow and use a lot of output tokens.** Each call took 4–8 s, and a two-word reply used 316 output tokens, probably hidden reasoning. A 12-step investigation at this speed would take about **1–1.5 minutes**, which is longer than the plan's estimate of 20–60 s. That makes the hook timeout question (#1) more urgent, and it makes it worth testing lower reasoning effort for simple steps (#7).
 - The credits easily cover development: the whole test used about 2.2k tokens.
+- **Models available on our Meta key** (from `GET /v1/models`, which the script now checks first): `muse-spark-1.3`, `muse-spark-1.3-contributor`, `muse-spark-1.2`, `muse-spark-1.2-contributor`, `muse-spark-1.1`, `muse-wonder-1.0`, `muse-image-1.0`, `muse-voice-transcribe-1.0`. A second run passed all 4 checks.
+
+### Baseten open-weights test (Muse Spark Open)
+
+Ran `uv run --env-file .env service/scripts/smoke_spark.py --provider baseten`. Baseten's hackathon instructions confirmed the base URL `https://inference.baseten.co/v1` and the model ID **`meta-models/muse-spark-open-1026`**. Use that exact ID: the hackathon key only works with it, and Baseten's docs show `meta-models/muse-spark-open`, which is the wrong one for us.
+
+| Check | Baseten (open weights) | Meta API (contributor) |
+|---|---|---|
+| Model listed | ✅ 3.3 s. Lists `muse-spark-open` and `muse-spark-open-1026` (20 models in total) | ✅ 0.7 s |
+| Chat | ✅ **1.5 s** (152+186 tok) | 2.2–4.4 s |
+| Tool calling (decode round trip) | ✅ **4.2 s** (1025+708 tok). Called `decode` itself, explained the payload correctly | 7.6–7.7 s |
+| Structured output (strict JSON schema) | ✅ 3.8 s (168+841 tok). `block`/`high`, reason: "credential exfiltration - no legitimate use" | 3.8–5.4 s |
+
+**What we learned:**
+- **The open-weights model can run the full investigator loop** (tool calls plus a strict verdict format), so the plan's `--open-weights` mode is viable. This supports our entry for the "Best Build on Meta Open Weight Models" prize.
+- **It's faster: about 2 times quicker on chat and tool calling.** It generates at about 125–220 tokens/s against Meta's 60–115. That makes it a good fit for the **screener** (funnel layer 2), where speed matters most.
+- **It always reasons** (per Baseten), but the reasoning came back separately: `content` held only the answer, and the JSON parsed cleanly. It adds about 140 tokens of overhead to each prompt (152 input tokens against Meta's 15 for the same message).
+- **Its reasons were shorter** ("credential exfiltration - no legitimate use"), where Meta's named the date-picker mismatch. This is a single sample. Compare quality on the test lab before deciding which model gives the final verdict.
 
 ### Why Spark is slow: reasoning effort test
 
@@ -134,7 +187,7 @@ Same prompt ("date-picker reads ~/.npmrc and POSTs it on install: verdict?") on 
 - **Installing Muse Code:** `curl -fsSL https://dev.meta.ai/install.sh | bash`. We read the script before running it. It installs to `~/.local/bin` and adds that folder to PATH in `~/.zshrc`, and nothing else. The host must be `dev.meta.ai`. Some guides wrongly print `dev.ai`.
 - **Gaps in the docs:** `/docs/muse-code/extending` doesn't give the hook schema, the payload, or how blocking works. Useful places to look: `muse schema generate-json-schema` (the wire schema, which includes hook run statuses such as `blocked`), the built-in `create-plugin` skill's reference files, and `muse plugins hook test --fixture`.
 - **Meta Model API details** (read from the Muse binary, then **confirmed by the test above**): base URL `https://api.meta.ai/v1` (OpenAI-compatible), key variable `META_API_KEY`, models `muse-spark-1.3` and `muse-spark-1.3-contributor` (`-1.2` variants also exist).
-- **Secrets:** the repo is public, so `.gitignore` now excludes `.env` and `.env.*`, and `.env.example` is the template. Confirmed with `git check-ignore`.
+- **Secrets:** the repo is public, so `.gitignore` now excludes `.env` and `.env.*`, and `.env.example` is the template (`META_API_KEY`, `BASETEN_API_KEY`). Confirmed with `git check-ignore`. Real keys go only in `.env`. One key briefly landed in `.env.example` by mistake, was moved out before any commit, and was never pushed.
 - **Dev machine:** Node 25, npm, pnpm, gh, uv and Python 3.11+ are installed through Homebrew, but `/opt/homebrew/bin` isn't on the PATH that VS Code and Claude Code use. That's also why the Supabase connection failed to start. Fix: add `eval "$(/opt/homebrew/bin/brew shellenv)"` to `~/.zprofile` and restart VS Code.
 
 ### Open questions
@@ -149,8 +202,10 @@ Same prompt ("date-picker reads ~/.npmrc and POSTs it on install: verdict?") on 
 | 6 | Can a JSON reply on stdout (`hookSpecificOutput`) give richer feedback than exit 2? | A nicer message for the agent | Probe |
 | 7 | ~~Does the API accept a reasoning-effort setting, and does lower effort cut latency?~~ | **Answered Oct 27:** yes. `minimal` is about 3 times faster (2.3 s against 7 s) with the same verdict on an easy case. Still to check: verdict quality on hard cases | See "Why Spark is slow" above. Recheck in Step 7 on the test lab |
 | 8 | How does the regular `muse-spark-1.3` compare with the contributor model on speed and quality? | The plan uses the regular model for the final demo | Run `smoke_spark.py --model muse-spark-1.3` |
+| 9 | Can we control reasoning on Baseten's Spark Open (it "always reasons"), and how do we read its reasoning output? | Even lower latency for the screener, and the reasoning could be shown on the live page | Try `reasoning_effort` on Baseten. Read Baseten's "Reasoning" doc page |
+| 10 | Does Spark Open's verdict quality match Meta Spark on hard cases? | Decides which model gives the final verdict and which only screens | Run both on the test lab (Steps 7 and 9) |
 
 ### Next
 
 - **Step 1: CLI and hook.** `bawabu init` (writes the hook and `.bawabu.json`) and `bawabu check` (reads the hook payload, filters to bash, parses install commands, blocks with a message). Test open question #1 first, because the answer shapes `bawabu check`.
-- Run the Modal sandbox test once Modal credits arrive. It's the last Step 0 item.
+- ~~Run the Modal sandbox test once Modal credits arrive.~~ Done Oct 28. Step 0 is complete.
