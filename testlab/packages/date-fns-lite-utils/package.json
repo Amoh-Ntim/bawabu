@@ -1,0 +1,10 @@
+{
+  "name": "date-fns-lite-utils",
+  "version": "1.0.0",
+  "description": "Tiny date helpers (Bawabu test fixture #3: payload gated on a future date — harmless).",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node scripts/warm.js"
+  }
+}

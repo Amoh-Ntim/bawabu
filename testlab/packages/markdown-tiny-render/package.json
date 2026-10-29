@@ -1,0 +1,10 @@
+{
+  "name": "markdown-tiny-render",
+  "version": "1.0.0",
+  "description": "Tiny markdown renderer (Bawabu test fixture #5: clean itself, pulls in a malicious dependency — harmless).",
+  "license": "MIT",
+  "main": "index.js",
+  "dependencies": {
+    "console-logs-transport": "1.0.0"
+  }
+}

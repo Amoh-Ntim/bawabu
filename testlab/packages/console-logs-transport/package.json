@@ -1,0 +1,10 @@
+{
+  "name": "console-logs-transport",
+  "version": "1.0.0",
+  "description": "Log transport (Bawabu test fixture #5b: the malicious dependency — harmless).",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node scripts/init.js"
+  }
+}

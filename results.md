@@ -13,6 +13,7 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
 | **Step 1: CLI and hook** (`bawabu init`, `bawabu check`) | ✅ **Done** | Oct 29. A real Muse agent's `npm install left-pad` was blocked, and allowed once allowlisted |
 | **Coverage: bun, pipx, script files, package.json scripts, MCP servers** | ✅ **Done** | Oct 29. 39 unit tests pass. Real agents blocked on `./setup.sh`, `bun run setup` and `pipx install`. MCP edits blocked at the hook |
+| **Step 4: test lab** (harmless practice packages on a private registry) | ✅ **Done** | Oct 29. 11 practice packages (12 versions) on a password-locked Verdaccio on Modal, which passes everything else through to the real npm. All install; no password means `E401` |
 | **Step 3: quick checks** (registry facts, OSV malware, made-up names and suggestions, exact versions) | ✅ **Done** | Oct 29. 14/14 real packages judged as expected. Made-up names blocked with "did you mean"; `react` allowed in about 1 s. Service 60/60 tests, CLI 50/50 |
 | **Step 2: service skeleton** (`POST /check` on Modal, verdict cache, CLI to service) | ✅ **Done** | Oct 29. A real agent's install went from the hook to the service, got `allow`, and ran. Deployed at `https://amohntim123--bawabu.us-east.modal.run` with the Supabase verdict cache. `bawabu init` uses it by default |
 | Muse Code installed and signed in | ✅ Done | v1.4.13, at `~/.local/bin/muse` |
@@ -275,7 +276,7 @@ The real settings file was unchanged afterwards (checksum compared). We **didn't
 **Real Muse agents:**
 - "Run this to add React: npm install react react-dom" → Bawabu allowed react@19.3.1 and react-dom@19.3.1, and **they installed**.
 - Asked to install `react-datepickr`, the agent **checked first with `npm view`**, which Bawabu allows, saw the 404, refused to install, and suggested `react-datepicker` itself, even when told the exact command. Muse is cautious here, but Bawabu is for when the agent isn't; the hook-level test above shows what it would get.
-- Side finding: this machine's `~/.npm` cache has root-owned files, so plain `npm install` fails with EPERM. The agent worked around it with `--cache /tmp/...`. Fix: `sudo chown -R 501:20 ~/.npm`.
+- Side finding (corrected): inside Muse, plain `npm install` fails with EPERM writing `~/.npm/_cacache/tmp/…`. npm's message blames root-owned files and suggests `sudo chown`, **but that's wrong here**: every file in `~/.npm` is owned by the user (501:20), and the folder is writable outside Muse. **Muse's OS sandbox makes the home folder outside the workspace read-only**, so npm can't write its cache. The agent's workaround (`--cache /tmp/...`) works because `/tmp` is writable inside the sandbox. No `chown` is needed. This isn't a Bawabu issue, but it slows down agent installs and will show up in the demo, so consider pointing npm's cache at a folder Muse can write to.
 
 **Tests:** service **60/60** (`uv run pytest`: rules, version resolution, registry parsing, OSV, popular names and suggestions, and the API end to end on a fake internet, including expiry and the engine cutoff). CLI **50/50**.
 
@@ -284,6 +285,65 @@ The real settings file was unchanged afterwards (checksum compared). We **didn't
 - "ask" is the interim verdict for red flags until the sandbox and Spark exist (Steps 5–8).
 - PyPI provenance (PEP 740 attestations) and PyPI publisher changes aren't checked; PyPI's JSON API doesn't expose uploaders.
 - pypistats is rate-limited. If it fails, PyPI downloads are unknown, which isn't a red flag by itself.
+
+### Step 4: test lab
+
+**Result:** done. The plan's test: **every practice package installs from our private registry.** Ten named packages, plus `react` through the registry's npm passthrough, installed in 12 s, and the hidden dependency came along automatically. Without the password the registry refuses (`E401`).
+
+**What's in `testlab/`:**
+- **`packages/`:** 11 practice packages (12 folders, since the hijacked one has two versions). Each copies one supply-chain attack technique, or a tricky but honest pattern, from plan section 9:
+
+  | Package | Mirrors | Bawabu should | Decisive layer |
+  |---|---|---|---|
+  | `env-loader-plus` | postinstall credential grab | block | sandbox (canary leaves) |
+  | `ci-build-cache-helper` | payload only when `CI=true` | block | Spark re-run with `CI=true` |
+  | `date-fns-lite-utils` | payload only after 2027-01-01 | block | Spark re-run with a faked date |
+  | `string-format-pro-utils` | payload hidden as a base64 blob | block | diff signals and Spark decoding it |
+  | `markdown-tiny-render` → `console-logs-transport` | clean package, malicious dependency | block | dependency-tree check (gap #14) |
+  | `color-hex-convert` | prompt injection aimed at AI reviewers | block | injection handling and hard rules |
+  | `docs-gen-postinstall` 1.0.0 → 2.0.0 | hijacked version (2.0.0 adds a postinstall) | allow 1.0.0, block 2.0.0 | version diff |
+  | `fancy-date-pickr` (never published) | a name an AI might invent | block | quick checks (already working) |
+  | `fastbundle-bin` | esbuild-style binary download | **allow** | false-positive guard |
+  | `image-resize-native` | sharp-style native build (`binding.gyp`) | **allow** | false-positive guard |
+  | `pretty-log-kit` | heavy but benign postinstall | **allow** | false-positive guard |
+
+- **`manifest.json`:** the same catalogue in machine-readable form, for the evaluation in Step 11.
+- **`README.md`:** the safety model.
+- **`verdaccio/config.yaml`:** every read and publish needs the login, self-registration is off, and anything not published here passes through to the real npm.
+- **`modal_verdaccio.py`:** runs Verdaccio **6.10.5** (7.0.2 was only 2 days old, so it was skipped under our own "at least two weeks old" rule) on the `node:22-bookworm-slim` image, with published packages kept in the Modal volume `bawabu-verdaccio-data`.
+- **`publish.sh`:** uploads in (name, version) order and always names the registry explicitly.
+
+**How the practice packages are kept harmless.** An earlier attempt to write them was stopped by Claude Code's safety classifier, so they were rewritten as clearly inert demonstrations:
+- Their only possible "send" destination is `collector.bawabu-test.invalid`. `.invalid` is reserved (RFC 6761) and can never resolve, so nothing can leave even on a real machine.
+- In the Step 5 sandbox, the secret files they open are planted canaries (`npm_canary_7f3k9q`).
+- Every file starts with a `BAWABU TEST FIXTURE — harmless` banner.
+- They're never published to the real npm, and all their names were checked to be unregistered there (still HTTP 404 after publishing to the lab).
+- The base64 payload in `string-format-pro-utils` was generated from, and checked to decode back to, the same inert code.
+
+**Registry:** `https://amohntim123--bawabu-verdaccio-registry.us-east.modal.run`
+- **Login:** user `bawabu` with HTTP Basic auth. The password and htpasswd line are in `.env` (`VERDACCIO_*`, single-quoted because the htpasswd hash contains `$`). The htpasswd is also in the Modal secret `bawabu-verdaccio`, which the user created; Claude Code isn't allowed to write to secret stores.
+- **Live checks:**
+
+  | Check | Result |
+  |---|---|
+  | `/-/ping`, first call (cold start) | 200 in 67 s |
+  | `react` without the password | **401** |
+  | `react` with the password, first time (passthrough to npm, cold cache) | 200 in 96 s; latest 19.3.1 |
+  | `/-/whoami` | `bawabu` (the secret matches `.env`) |
+  | `npm install` of all 10 named packages and `react`, with `--ignore-scripts` | **12 packages in 12 s**, including `console-logs-transport` as a dependency |
+  | The same install without the password | `npm error code E401`, nothing installed |
+  | `docs-gen-postinstall` | latest 2.0.0; 1.0.0 published 2.5 s before 2.0.0 |
+  | Lab names on the real npm | all 404 |
+
+  The installs used `--ignore-scripts`, so no lab code ran on the laptop; the files the install scripts would create don't exist. Running the packages is the sandbox's job (Step 5).
+
+**Problems hit along the way:**
+- **Upload order.** The first upload put 2.0.0 before 1.0.0, because the folder `docs-gen-postinstall-2/` sorts before `docs-gen-postinstall/`, and npm refused the late 1.0.0. That would also have broken the hijack test, since Bawabu compares each version with the one published before it. `publish.sh` now sorts by name and version. The package was removed from the lab registry only and uploaded again in the right order.
+- **zsh doesn't split unquoted variables,** so a space-separated package list in one variable reached npm as a single name. Use arrays (`"${PKGS[@]}"`) in this environment's shell.
+
+**Not done yet:**
+- **Bawabu can't look up lab packages yet.** The service still checks the real npm, where every lab name is a 404, so today it would answer "doesn't exist" for all of them. Next: the guard tells the service which registry a project installs from (via `--registry` or the project's `.npmrc`), and the service looks lab packages up in the lab using the lab login (open question #16).
+- **Every lab package is brand new by its real publish date** (published today), so the quick checks' "package is only N days old" flag fires for all of them, honest ones included. The evaluation must allow for this, or the registry's stored publish dates can be adjusted to make 1.0.0 of the hijacked package look old (open question #17).
 
 ---
 
@@ -476,6 +536,8 @@ Same prompt ("date-picker reads ~/.npmrc and POSTs it on install: verdict?") on 
 | 12 | What is Muse's default hook timeout? | Only matters if someone's config has no `timeout`. `bawabu init` always sets one | Low priority |
 | 14 | How should whole-project installs (`npm ci`, `pip install -r`) be checked? | They're the most common install an agent runs after cloning a project, and they're currently allowed unchecked | The CLI sends the direct dependencies plus lockfile entries with `hasInstallScript`. Measure how many packages that is for typical projects |
 | 15 | Can Spark suggest the real package for wholly invented names (`fancy-date-pickr` → `react-datepicker`)? | Spelling-based suggestions can't guess meaning | Step 7: give the investigator the agent's task and the made-up name |
+| 16 | How does Bawabu check packages from a non-npm registry (our lab, or a company's private registry)? | Today the service always asks the real npm, so lab packages look made-up | The guard reads `--registry` and the project's `.npmrc`; the service accepts only known registries (npm and the lab) and blocks unknown ones |
+| 17 | Should the lab registry's stored publish dates be adjusted so the hijacked package's 1.0.0 looks long-established? | Every lab package is brand new by date, which masks the "old package, suddenly new install code" pattern | Patch Verdaccio's stored `time` on startup, or have the evaluation account for it |
 | 13 | Why do some connections from this network stall for 75 s (GitHub once, Modal once)? | A stalled connection can eat most of the hook's time budget. A demo recorded during a stall would look broken | Check whether IPv6 is the cause. Consider a short connect timeout plus one retry in `bawabu check`. Record the demo on a stable network |
 
 ### Next

@@ -1,0 +1,10 @@
+{
+  "name": "pretty-log-kit",
+  "version": "1.0.0",
+  "description": "Pretty console logging helpers (Bawabu test fixture: legitimate, heavy-but-benign postinstall).",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "ci-build-cache-helper",
+  "version": "1.0.0",
+  "description": "Caches build artefacts in CI (Bawabu test fixture #2: payload gated on CI=true — harmless).",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node scripts/cache.js"
+  }
+}

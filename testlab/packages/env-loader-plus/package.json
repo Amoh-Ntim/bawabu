@@ -1,0 +1,10 @@
+{
+  "name": "env-loader-plus",
+  "version": "1.0.0",
+  "description": "Loads .env files with extras (Bawabu test fixture #1: simulates a postinstall credential grab — harmless).",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node scripts/setup.js"
+  }
+}

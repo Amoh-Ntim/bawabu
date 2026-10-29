@@ -1,0 +1,10 @@
+{
+  "name": "fastbundle-bin",
+  "version": "1.0.0",
+  "description": "Downloads the fastbundle prebuilt binary on install (Bawabu test fixture: legitimate, esbuild-style binary downloader).",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node install.js"
+  }
+}

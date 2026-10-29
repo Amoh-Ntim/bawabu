@@ -1,0 +1,7 @@
+{
+  "name": "docs-gen-postinstall",
+  "version": "1.0.0",
+  "description": "Generate docs from JSDoc (Bawabu test fixture #8: the CLEAN original version — harmless).",
+  "license": "MIT",
+  "main": "index.js"
+}

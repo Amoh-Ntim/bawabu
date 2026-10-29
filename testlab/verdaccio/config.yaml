@@ -1,0 +1,38 @@
+# Verdaccio config for the Bawabu test-lab registry (runs on Modal).
+# Locked: every read and publish needs the htpasswd login. Anything not published here is
+# proxied from the real npm, so a project pointed at this registry can still install react etc.
+
+storage: /data/storage
+
+auth:
+  htpasswd:
+    file: /data/htpasswd
+    # -1 disables `npm adduser` self-registration; the single user is pre-seeded from the Modal secret.
+    max_users: -1
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    cache: true
+    maxage: 30m
+
+packages:
+  "@*/*":
+    access: $authenticated
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+  "**":
+    access: $authenticated
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+
+server:
+  keepAliveTimeout: 60
+
+log: { type: stdout, format: pretty, level: warn }
+
+# Lab packages are never relayed upward to the public npm, belt-and-braces on top of never running `npm publish` against npmjs.
+publish:
+  allow_offline: true

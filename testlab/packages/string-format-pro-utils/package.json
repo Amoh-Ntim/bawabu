@@ -1,0 +1,10 @@
+{
+  "name": "string-format-pro-utils",
+  "version": "1.0.0",
+  "description": "String formatting helpers (Bawabu test fixture #4: install payload hidden as a base64 blob — harmless).",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node scripts/build.js"
+  }
+}

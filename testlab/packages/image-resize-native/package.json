@@ -1,0 +1,8 @@
+{
+  "name": "image-resize-native",
+  "version": "1.0.0",
+  "description": "Native image resizing (Bawabu test fixture: legitimate, sharp-style native build via node-gyp).",
+  "license": "MIT",
+  "main": "index.js",
+  "gypfile": true
+}
