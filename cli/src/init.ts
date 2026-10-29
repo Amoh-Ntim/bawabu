@@ -3,8 +3,9 @@ import { accessSync, constants, existsSync, mkdirSync, readFileSync, realpathSyn
 import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_CONFIG } from "./config.js";
+import { DEFAULT_CONFIG, isValidServiceUrl, loadConfig, type Config } from "./config.js";
 import { CONFIG_RELATIVE_PATH, HOOK_TIMEOUT_SECONDS } from "./constants.js";
+import { serviceHealth } from "./service.js";
 import { shellQuote } from "./shell.js";
 
 interface HookEntry {
@@ -21,10 +22,17 @@ interface HooksFile {
 }
 
 /** Installs the Muse Code hook and config in a project. Returns false if the self-test fails. */
-export function init(dir: string, force: boolean): boolean {
+export async function init(dir: string, options: { force: boolean; serviceUrl?: string }): Promise<boolean> {
   const projectDir = resolve(dir);
   const hooksPath = join(projectDir, ".muse", "hooks.json");
   const configPath = join(projectDir, CONFIG_RELATIVE_PATH);
+
+  if (options.serviceUrl && !isValidServiceUrl(options.serviceUrl)) {
+    throw new Error(`--service must be an https:// URL (or http://localhost for development), got ${options.serviceUrl}`);
+  }
+  // An existing config is kept (allowlist and all); --service only changes the service URL.
+  const existing = existsSync(configPath) && !options.force ? loadConfig(configPath) : null;
+  const config: Config = { ...(existing ?? DEFAULT_CONFIG), ...(options.serviceUrl ? { serviceUrl: options.serviceUrl } : {}) };
 
   if (!findExecutable("muse") && !existsSync(join(homedir(), ".local", "bin", "muse"))) {
     console.warn("! Muse Code wasn't found. Install it from https://dev.meta.ai, then open this folder in it.");
@@ -40,11 +48,11 @@ export function init(dir: string, force: boolean): boolean {
   writeFileSync(hooksPath, JSON.stringify(hooks, null, 2) + "\n");
   console.log(`✔ Hook installed: ${hooksPath} (PreToolUse, timeout ${HOOK_TIMEOUT_SECONDS}s)`);
 
-  if (existsSync(configPath) && !force) {
+  if (existing && !options.serviceUrl) {
     console.log(`✔ Config kept: ${configPath}`);
   } else {
-    writeFileSync(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n");
-    console.log(`✔ Config written: ${configPath} (mode: ${DEFAULT_CONFIG.mode})`);
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    console.log(`✔ Config ${existing ? "updated" : "written"}: ${configPath} (mode: ${config.mode}, service: ${config.serviceUrl ?? "none"})`);
   }
 
   const failure = selfTest(command, projectDir);
@@ -54,6 +62,16 @@ export function init(dir: string, force: boolean): boolean {
     return false;
   }
   console.log("✔ Self-test passed: installs are stopped, other commands run.");
+
+  if (!config.serviceUrl) {
+    console.log("! No service configured: every install will be blocked until you run `bawabu init --service <url>`.");
+  } else {
+    try {
+      console.log(`✔ Service reachable: ${config.serviceUrl} (${await serviceHealth(config.serviceUrl)})`);
+    } catch (e) {
+      console.warn(`! Service not reachable at ${config.serviceUrl} (${(e as Error).message}). Installs will be blocked until it is.`);
+    }
+  }
   console.log("\nNext: open this folder in Muse Code and trust the workspace when asked, so the hook loads.");
   return true;
 }

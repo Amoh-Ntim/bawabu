@@ -6,5 +6,8 @@ export const HOOK_TIMEOUT_SECONDS = 180;
 /** `bawabu check` gives up and blocks well before Muse's timeout. */
 export const CHECK_DEADLINE_SECONDS = 150;
 
+/** How long to wait for the service's verdict, inside the deadline above. */
+export const SERVICE_TIMEOUT_SECONDS = 140;
+
 /** Inside .muse/ so the agent can't edit it without a human approving each write. */
 export const CONFIG_RELATIVE_PATH = ".muse/bawabu.json";

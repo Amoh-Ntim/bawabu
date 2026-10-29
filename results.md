@@ -13,6 +13,7 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
 | **Step 1: CLI and hook** (`bawabu init`, `bawabu check`) | ✅ **Done** | Oct 29. A real Muse agent's `npm install left-pad` was blocked, and allowed once allowlisted |
 | **Coverage: bun, pipx, script files, package.json scripts, MCP servers** | ✅ **Done** | Oct 29. 39 unit tests pass. Real agents blocked on `./setup.sh`, `bun run setup` and `pipx install`. MCP edits blocked at the hook |
+| **Step 2: service skeleton** (`POST /check` on Modal, verdict cache, CLI to service) | 🟡 **Working, cache not yet permanent** | Oct 29. A real agent's install went from the hook to the service, got `allow`, and ran. Deployed at `https://amohntim123--bawabu.us-east.modal.run`. The cache is in memory until the Supabase project exists (waiting on the user to create a "Bawabu" organization) |
 | Muse Code installed and signed in | ✅ Done | v1.4.13, at `~/.local/bin/muse` |
 | **Muse Code hook can block and message the agent** | ✅ **Proven** | Oct 27. See below |
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
@@ -129,6 +130,45 @@ The real settings file was unchanged afterwards (checksum compared). We **didn't
 - **Commands passed as data to other tools**, such as `find -exec`, `watch` and `nodemon --exec`.
 - **Remote URL MCP servers** pass, because nothing is installed locally. They aren't vetted beyond that.
 - Muse auto-updated from 1.4.13 to 1.4.14 during the day. The hook format still worked, but these tests should be re-run after Muse updates.
+
+### Step 2: service skeleton
+
+**Result:** the hook now asks a cloud service for a verdict. In a real Muse session, the agent's `npm install left-pad --save` went from the hook to the service, got `allow`, and the **install ran** (`left-pad@^1.3.0` in package.json and node_modules). The service is deployed on Modal at **`https://amohntim123--bawabu.us-east.modal.run`**.
+
+**Service** (`service/bawabu_service/`, FastAPI; `service/modal_app.py` deploys it):
+- `GET /health` reports the version, engine and cache.
+- `POST /check` takes `{client_version, packages: [{ecosystem, name, version}], manifests: [{ecosystem, manager}]}` and returns an overall verdict (`allow`/`block`/`ask`; any block blocks) plus one result per package or manifest, with its reason and whether it was cached.
+- **Privacy rule:** the CLI sends only package names and versions, **never the command line**, which can hold tokens and paths. A test checks that `NPM_TOKEN=secret npm install …` sends no `secret`, `NPM_TOKEN` or `install`.
+- **The cache stores verdicts per exact version** (`left-pad@1.3.0`). "latest", tags and ranges aren't cached yet; Step 3 resolves them to exact versions.
+- **Each verdict records the engine that made it.** A lookup only trusts verdicts from engine ≥ `MIN_ENGINE`. The skeleton is engine 0 (it allows everything); Step 3 raises it to 1, so **none of the skeleton's "allow" verdicts are ever reused.**
+- A broken cache never breaks a check; it's treated as a cache miss.
+- Two cache backends: in-memory (the current deployment, per container) and **Supabase** through its REST API with the secret key (written and tested against a mock, not yet connected).
+
+**CLI** (`cli/src/service.ts`, `check.ts`, `init.ts`):
+- `bawabu check` sends the packages that still need checking to `serviceUrl/check` (140 s timeout, inside the 150 s deadline). Allowlisted and local packages aren't sent.
+- `allow` lets the command run. `block` stops it with the service's reason per package. `ask` stops it and tells the agent to ask the user. This also works for MCP servers.
+- **Still fail-closed:** an unreachable service, a timeout, a non-200 answer or an unexpected response body all block, with the error in the message.
+- Git and URL installs are blocked locally ("can't check yet") without asking the service.
+- `bawabu init --service <url>` sets the service URL (keeping an existing allowlist) and checks `/health`. **Only `https://` is accepted** (or `http://localhost` for development), both in `init` and when the config loads.
+
+**Tests:** CLI 49/49 (`cd cli && npm test`), service 10/10 (`uv run pytest`).
+
+**Live measurements:**
+
+| What | Result |
+|---|---|
+| Deployed `/health`, cold start | 4.7 s |
+| Deployed `/health`, warm | 0.9 s |
+| Deployed `/check` (left-pad@1.3.0), then repeated | 0.9 s, then `cached: true` |
+| Real hook command (Muse input format, cleared env) to the cloud service: `npm install is-odd@3.0.1` | allow, **1.6 s** end to end |
+| Real Muse agent, local service | 2 checks, both allow, install ran |
+
+**Open question #11 answered: Muse honours a 180 s hook timeout.** A probe hook that ran for 150 s with `"timeout": 180` survived to the end and blocked, and the command never ran. Bawabu's own 150 s deadline inside the 180 s timeout is therefore safe.
+
+**Not done yet in Step 2:**
+- **Permanent cache:** waiting for the Supabase project. Then: create the `verdicts` table (RLS on), store `SUPABASE_URL` and `SUPABASE_SECRET_KEY` as a Modal secret, and redeploy.
+- **Default service URL:** `bawabu init` should use the deployed URL by default, so users don't need `--service`.
+- **No auth or rate limit** on the public endpoint yet. That matters before the endpoint starts spending Spark credits (Step 7).
 
 ---
 
@@ -317,7 +357,7 @@ Same prompt ("date-picker reads ~/.npmrc and POSTs it on install: verdict?") on 
 | 8 | How does the regular `muse-spark-1.3` compare with the contributor model on speed and quality? | The plan uses the regular model for the final demo | Run `smoke_spark.py --model muse-spark-1.3` |
 | 9 | Can we control reasoning on Baseten's Spark Open (it "always reasons"), and how do we read its reasoning output? | Even lower latency for the screener, and the reasoning could be shown on the live page | Try `reasoning_effort` on Baseten. Read Baseten's "Reasoning" doc page |
 | 10 | Does Spark Open's verdict quality match Meta Spark on hard cases? | Decides which model gives the final verdict and which only screens | Run both on the test lab (Steps 7 and 9) |
-| 11 | Is a large explicit `"timeout"` (for example 180 s) honoured in full, or capped? | Our own deadline sits inside it. If Muse caps it lower, a slow check could fail open | Step 1: run a hook for 150 s with `"timeout": 180` |
+| 11 | ~~Is a large explicit `"timeout"` (for example 180 s) honoured in full, or capped?~~ | **Answered Oct 29:** honoured. A 150 s hook with `"timeout": 180` finished and blocked | See "Step 2: service skeleton" (Oct 29) |
 | 12 | What is Muse's default hook timeout? | Only matters if someone's config has no `timeout`. `bawabu init` always sets one | Low priority |
 
 ### Next

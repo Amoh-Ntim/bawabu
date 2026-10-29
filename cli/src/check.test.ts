@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decide, type Env } from "./check.js";
 import { DEFAULT_CONFIG, type Config } from "./config.js";
+import type { Post } from "./service.js";
 
 const SETTINGS = "/home/u/.config/muse/settings.json";
 
@@ -160,4 +161,92 @@ test("ordinary file writes run", async () => {
   assert.equal(await exitFor(tool("write_file", { path: "src/app.ts", content: "npm install evil" })), 0);
   assert.equal(await exitFor(tool("write_file", { path: "package.json", content: '{"name":"x"}' })), 0);
   assert.equal(await exitFor(tool("edit_file", { path: SETTINGS, find: "nope", replace: "x" }), config(), env({ [SETTINGS]: settings() })), 0);
+});
+
+// ---------------------------------------------------------------------------
+// Verdicts from the Bawabu service
+
+const SERVICE = "https://bawabu.example";
+const withService = (overrides: Partial<Config> = {}) => config({ serviceUrl: SERVICE, ...overrides });
+const answer = (verdict: string, results: object[] = [], manifests: object[] = []) => ({ verdict, results, manifests });
+const result = (name: string, verdict: string, reason = "r") => ({ ecosystem: "npm", name, requested: "", version: "1.0.0", verdict, reason, cached: false });
+
+/** A fake service that records what it was sent and replies with `reply` (or throws it, if it's an Error). */
+function service(reply: unknown) {
+  const calls: Array<{ url: string; body: any }> = [];
+  const post: Post = async (url, body) => {
+    calls.push({ url, body });
+    if (reply instanceof Error) throw reply;
+    return reply;
+  };
+  return { calls, env: { ...env(), post } };
+}
+
+test("an allow from the service lets the install run, and only package names and versions are sent", async () => {
+  const s = service(answer("allow", [result("left-pad", "allow")]));
+  const d = await decide(bash("NPM_TOKEN=secret npm install left-pad@1.3.0"), withService(), s.env);
+  assert.equal(d.exitCode, 0);
+  assert.equal(d.record?.decision, "allow");
+  assert.equal(s.calls[0].url, `${SERVICE}/check`);
+  assert.deepEqual(s.calls[0].body.packages, [{ ecosystem: "npm", name: "left-pad", version: "1.3.0" }]);
+  assert.doesNotMatch(JSON.stringify(s.calls[0].body), /secret|NPM_TOKEN|install/);
+});
+
+test("a block from the service blocks with its reason", async () => {
+  const s = service(answer("block", [result("evil", "block", "reads ~/.npmrc and sends it away")]));
+  const d = await decide(bash("npm install evil"), withService(), s.env);
+  assert.equal(d.exitCode, 2);
+  assert.match(d.message!, /evil@1\.0\.0 \(npm\): reads ~\/\.npmrc and sends it away/);
+  assert.match(d.message!, /Don't try to install it another way/);
+});
+
+test("an ask from the service stops and tells the agent to ask the user", async () => {
+  const s = service(answer("ask", [result("odd", "ask", "brand new, few downloads")]));
+  const d = await decide(bash("npm install odd"), withService(), s.env);
+  assert.equal(d.exitCode, 2);
+  assert.match(d.message!, /needs the user's OK/);
+  assert.match(d.message!, /brand new, few downloads/);
+});
+
+test("service failures block", async () => {
+  const down = await decide(bash("npm install x"), withService(), service(new Error("couldn't connect to bawabu.example")).env);
+  assert.equal(down.exitCode, 2);
+  assert.match(down.message!, /couldn't get a verdict.*couldn't connect/);
+  const garbled = await decide(bash("npm install x"), withService(), service({ hello: "world" }).env);
+  assert.equal(garbled.exitCode, 2);
+  assert.match(garbled.message!, /unexpected answer/);
+});
+
+test("git and URL installs are blocked without asking the service", async () => {
+  const s = service(answer("allow"));
+  const d = await decide(bash("npm install user/repo"), withService(), s.env);
+  assert.equal(d.exitCode, 2);
+  assert.match(d.message!, /git repo or URL/);
+  assert.equal(s.calls.length, 0);
+});
+
+test("allowlisted and local packages aren't sent; whole-project installs and pip are", async () => {
+  const s = service(answer("allow"));
+  await decide(bash("npm install left-pad evil ./local && npm ci && pip install requests"), withService({ allowlist: ["left-pad"] }), s.env);
+  const body = s.calls[0].body;
+  assert.deepEqual(body.packages, [
+    { ecosystem: "npm", name: "evil", version: "" },
+    { ecosystem: "pypi", name: "requests", version: "" },
+  ]);
+  assert.deepEqual(body.manifests, [{ ecosystem: "npm", manager: "npm" }]);
+});
+
+test("a trailing slash in the service URL is fine", async () => {
+  const s = service(answer("allow"));
+  await decide(bash("npm install x"), withService({ serviceUrl: `${SERVICE}/` }), s.env);
+  assert.equal(s.calls[0].url, `${SERVICE}/check`);
+});
+
+test("MCP servers get the service's verdict too", async () => {
+  const write = tool("write_file", { path: SETTINGS, content: settings({ github }) });
+  assert.equal((await decide(write, withService(), service(answer("allow")).env)).exitCode, 0);
+  const blocked = await decide(write, withService(), service(answer("block", [result("@modelcontextprotocol/server-github", "block", "hijacked")])).env);
+  assert.equal(blocked.exitCode, 2);
+  assert.match(blocked.message!, /MCP server "github" wasn't added/);
+  assert.match(blocked.message!, /hijacked/);
 });

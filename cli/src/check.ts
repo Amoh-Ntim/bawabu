@@ -2,9 +2,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "n
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig, type Config } from "./config.js";
-import { CHECK_DEADLINE_SECONDS } from "./constants.js";
+import { CHECK_DEADLINE_SECONDS, SERVICE_TIMEOUT_SECONDS } from "./constants.js";
 import { addedServers, analyzeServer } from "./mcp.js";
 import { analyze, merge, resolvePath, type Analysis, type Context, type FileRead, type Install, type PackageSpec } from "./parse.js";
+import { checkRequest, httpPost, parseCheckResponse, type CheckResponse, type Post } from "./service.js";
 
 /**
  * Muse runs the hook before every tool call. Exit 2 blocks the call and shows stderr to the agent.
@@ -23,6 +24,7 @@ export interface Env {
   home: string;
   readFile: (path: string) => FileRead;
   binExists: (cwd: string, bin: string) => boolean;
+  post: Post;
 }
 
 interface HookPayload {
@@ -89,9 +91,24 @@ export async function decide(input: string, getConfig: () => Config, envOverride
     .map((install) => ({ ...install, packages: install.packages.filter((p) => needsCheck(p, install, config, cwd, env)) }))
     .filter((install) => install.action === "manifest" || install.packages.length);
   if (!toCheck.length) return { exitCode: 0, record: { ...record, decision: "allow", reason: "allowlisted or local" } };
+  if (!config.serviceUrl) return block(noServiceMessage(subject, toCheck), { ...record, decision: "block", reason: "no service" });
 
-  // Step 2 replaces this with a verdict from the Bawabu service.
-  return block(noServiceMessage(subject, toCheck), { ...record, decision: "block", reason: "no service" });
+  const unsupported = toCheck.flatMap((i) => i.packages.filter((p) => p.source !== "registry"));
+  if (unsupported.length) return block(unsupportedMessage(unsupported), { ...record, decision: "block", reason: "git or url source" });
+
+  let response: CheckResponse;
+  try {
+    const answer = await env.post(`${config.serviceUrl.replace(/\/+$/, "")}/check`, checkRequest(toCheck), SERVICE_TIMEOUT_SECONDS * 1000);
+    response = parseCheckResponse(answer);
+  } catch (e) {
+    const error = (e as Error).message;
+    return block(
+      `⛔ Blocked by Bawabu: it couldn't get a verdict from its service (${error}), so it blocked this to be safe. Try again in a minute; if it keeps happening, tell the user.`,
+      { ...record, decision: "block", reason: "service error", error },
+    );
+  }
+  const outcome = { ...record, decision: response.verdict, reason: "service", service: response };
+  return response.verdict === "allow" ? { exitCode: 0, record: outcome } : block(verdictMessage(subject, response), outcome);
 }
 
 /** An edit that adds MCP servers, worked out from the file as it would be after the edit; null for any other edit. */
@@ -156,6 +173,28 @@ function noServiceMessage(subject: Subject, installs: Install[]): string {
   ].join("\n");
 }
 
+function verdictMessage(subject: Subject, response: CheckResponse): string {
+  const icon = (verdict: string) => (verdict === "block" ? "⛔" : "⏸");
+  const lines = [
+    ...response.results
+      .filter((r) => r.verdict !== "allow")
+      .map((r) => `${icon(r.verdict)} ${r.name}${r.version || r.requested ? `@${r.version ?? r.requested}` : ""} (${r.ecosystem}): ${r.reason}`),
+    ...response.manifests.filter((m) => m.verdict !== "allow").map((m) => `${icon(m.verdict)} the project's ${m.manager} dependencies: ${m.reason}`),
+  ];
+  const what = subject.kind === "mcp" ? `the MCP server ${subject.servers.map((s) => `"${s}"`).join(", ")} wasn't added` : "this wasn't installed";
+  if (response.verdict === "block") {
+    return [`⛔ Blocked by Bawabu: ${what}.`, ...lines, `Don't try to ${subject.kind === "mcp" ? "add" : "install"} it another way. Tell the user what Bawabu found.`].join("\n");
+  }
+  return [`⏸ Bawabu needs the user's OK first: ${what}.`, ...lines, "Ask the user whether to go ahead; if they trust it, they can allowlist it in .muse/bawabu.json."].join("\n");
+}
+
+function unsupportedMessage(packages: PackageSpec[]): string {
+  return [
+    `⛔ Blocked by Bawabu: ${packages.map((p) => `\`${p.raw}\``).join(", ")} ${packages.length > 1 ? "come" : "comes"} from a git repo or URL, which Bawabu can't check yet.`,
+    "Install from the registry instead, or ask the user; if they trust it, they can allowlist it in .muse/bawabu.json.",
+  ].join("\n");
+}
+
 const asString = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
 
 function parseJson(text: string): unknown {
@@ -171,6 +210,7 @@ export function nodeEnv(): Env {
     home: process.env.HOME ?? homedir(),
     readFile: readFileForAnalysis,
     binExists: (cwd, bin) => existsSync(join(cwd, "node_modules", ".bin", bin)),
+    post: httpPost,
   };
 }
 
