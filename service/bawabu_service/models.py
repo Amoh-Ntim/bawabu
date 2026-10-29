@@ -39,6 +39,10 @@ class PackageResult(BaseModel):
     version: str | None
     verdict: Verdict
     reason: str
+    # The red flags behind an "ask" or "block", one sentence each.
+    signals: list[str] = Field(default_factory=list)
+    # A real package the agent probably meant (for made-up or lookalike names).
+    suggestion: str | None = None
     cached: bool
 
 

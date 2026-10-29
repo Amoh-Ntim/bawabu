@@ -1,12 +1,14 @@
 """Verdicts cached per exact package version, so each version is judged once.
 
 Each verdict records the engine that made it. A lookup only accepts verdicts from an engine at least
-`min_engine`, so when the checks improve, older verdicts are judged again instead of trusted.
+`min_engine`, so when the checks improve, older verdicts are judged again instead of trusted. Verdicts also
+expire, so new information (a fresh malware report) gets picked up.
 """
 
 import logging
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 import httpx
@@ -19,6 +21,12 @@ class CachedVerdict:
     verdict: str
     reason: str
     engine: int
+    signals: tuple[str, ...] = ()
+    suggestion: str | None = None
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Cache(Protocol):
@@ -26,7 +34,7 @@ class Cache(Protocol):
 
     async def get(self, ecosystem: str, package: str, version: str, min_engine: int) -> CachedVerdict | None: ...
 
-    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict) -> None: ...
+    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict, ttl_seconds: int) -> None: ...
 
 
 class MemoryCache:
@@ -34,15 +42,18 @@ class MemoryCache:
 
     name = "memory"
 
-    def __init__(self) -> None:
-        self._items: dict[tuple[str, str, str], CachedVerdict] = {}
+    def __init__(self, clock=_now) -> None:
+        self._items: dict[tuple[str, str, str], tuple[CachedVerdict, datetime]] = {}
+        self._clock = clock
 
     async def get(self, ecosystem: str, package: str, version: str, min_engine: int) -> CachedVerdict | None:
         hit = self._items.get((ecosystem, package, version))
-        return hit if hit and hit.engine >= min_engine else None
+        if hit and hit[0].engine >= min_engine and hit[1] > self._clock():
+            return hit[0]
+        return None
 
-    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict) -> None:
-        self._items[(ecosystem, package, version)] = verdict
+    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict, ttl_seconds: int) -> None:
+        self._items[(ecosystem, package, version)] = (verdict, self._clock() + timedelta(seconds=ttl_seconds))
 
 
 class SupabaseCache:
@@ -50,32 +61,47 @@ class SupabaseCache:
 
     name = "supabase"
 
-    def __init__(self, url: str, key: str, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(self, url: str, key: str, client: httpx.AsyncClient | None = None, clock=_now) -> None:
         self._table = f"{url.rstrip('/')}/rest/v1/verdicts"
         # New-style secret keys (sb_secret_...) go in `apikey` only; legacy JWT keys also need Authorization.
         self._headers = {"apikey": key} if key.startswith("sb_") else {"apikey": key, "Authorization": f"Bearer {key}"}
         self._client = client or httpx.AsyncClient(timeout=10)
+        self._clock = clock
 
     async def get(self, ecosystem: str, package: str, version: str, min_engine: int) -> CachedVerdict | None:
         params = {
-            "select": "verdict,reason,engine",
+            "select": "verdict,reason,engine,signals,suggestion",
             "ecosystem": f"eq.{ecosystem}",
             "name": f"eq.{package}",
             "version": f"eq.{version}",
             "engine": f"gte.{min_engine}",
+            "expires_at": f"gt.{self._clock().isoformat()}",
             "limit": "1",
         }
         response = await self._client.get(self._table, headers=self._headers, params=params)
         response.raise_for_status()
         rows = response.json()
-        return CachedVerdict(**rows[0]) if rows else None
+        if not rows:
+            return None
+        row = rows[0]
+        return CachedVerdict(row["verdict"], row["reason"], row["engine"], tuple(row.get("signals") or ()), row.get("suggestion"))
 
-    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict) -> None:
+    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict, ttl_seconds: int) -> None:
         response = await self._client.post(
             self._table,
             headers={**self._headers, "Prefer": "resolution=merge-duplicates,return=minimal"},
             params={"on_conflict": "ecosystem,name,version"},
-            json={"ecosystem": ecosystem, "name": package, "version": version, **asdict(verdict)},
+            json={
+                "ecosystem": ecosystem,
+                "name": package,
+                "version": version,
+                "verdict": verdict.verdict,
+                "reason": verdict.reason,
+                "engine": verdict.engine,
+                "signals": list(verdict.signals),
+                "suggestion": verdict.suggestion,
+                "expires_at": (self._clock() + timedelta(seconds=ttl_seconds)).isoformat(),
+            },
         )
         response.raise_for_status()
 

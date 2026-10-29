@@ -13,6 +13,7 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
 | **Step 1: CLI and hook** (`bawabu init`, `bawabu check`) | ✅ **Done** | Oct 29. A real Muse agent's `npm install left-pad` was blocked, and allowed once allowlisted |
 | **Coverage: bun, pipx, script files, package.json scripts, MCP servers** | ✅ **Done** | Oct 29. 39 unit tests pass. Real agents blocked on `./setup.sh`, `bun run setup` and `pipx install`. MCP edits blocked at the hook |
+| **Step 3: quick checks** (registry facts, OSV malware, made-up names and suggestions, exact versions) | ✅ **Done** | Oct 29. 14/14 real packages judged as expected. Made-up names blocked with "did you mean"; `react` allowed in about 1 s. Service 60/60 tests, CLI 50/50 |
 | **Step 2: service skeleton** (`POST /check` on Modal, verdict cache, CLI to service) | ✅ **Done** | Oct 29. A real agent's install went from the hook to the service, got `allow`, and ran. Deployed at `https://amohntim123--bawabu.us-east.modal.run` with the Supabase verdict cache. `bawabu init` uses it by default |
 | Muse Code installed and signed in | ✅ Done | v1.4.13, at `~/.local/bin/muse` |
 | **Muse Code hook can block and message the agent** | ✅ **Proven** | Oct 27. See below |
@@ -189,6 +190,100 @@ The real settings file was unchanged afterwards (checksum compared). We **didn't
   - ⚠️ **One outlier: a single `/check` took 76.6 s.** That's almost exactly macOS's 75 s TCP connection timeout plus a normal reply, the same pattern as the user's GitHub push error ("Failed to connect … after 75003 ms"). So it was **this network failing to connect once, not the service**: every other request took 2–3 s. For the demo, record on a stable network (see open question #13).
 - ~~**Default service URL**~~ **Done:** `bawabu init` now uses `https://amohntim123--bawabu.us-east.modal.run` by default, so `--service` is only needed to point somewhere else. A fresh `bawabu init` with no flags reported "Service reachable … cache supabase". Unit tests never touch the network: the test config sets the service to `null` unless a test supplies a fake one.
 - **No auth or rate limit** on the public endpoint yet. That matters before the endpoint starts spending Spark credits (Step 7).
+
+### Step 3: quick checks
+
+**Result:** the service now makes real decisions, in about a second, without running anything. In the plan's terms: **made-up names are blocked (with a suggestion of the real package), and `react` is allowed instantly.** Deployed as service version 0.2.0, engine 1.
+
+**What the checks do** (`service/bawabu_service/`):
+- **`registry.py`:** reads npm's full package metadata, or PyPI's JSON API, and **resolves the request to the exact version npm or pip would install.** Rules:
+  - npm: dist-tags; exact versions with or without `v`/`=`; ranges, preferring `latest` when it satisfies the range, as npm does (`semantic_version.NpmSpec`).
+  - pip: PEP 440 specifiers (`packaging`); environment markers ignored; yanked releases skipped unless pinned exactly with `==`; uv-style `name@1.2`.
+  - Facts it collects:
+    - when the package and the version were first published;
+    - code that runs on install: npm `preinstall`/`install`/`postinstall`, an implicit `node-gyp` build from `binding.gyp`, or for PyPI a release with no wheel, which runs its setup code;
+    - the same for the version published just before this one;
+    - npm provenance (`dist.attestations`) for this version and the previous one;
+    - who published this version, and who published earlier ones;
+    - deprecation and yanked status.
+  - Weekly downloads come from api.npmjs.org and pypistats.org.
+- **`osv.py`:** OSV.dev `MAL-` entries for the exact version. If the package or version no longer exists, it asks OSV about the whole package, because a deleted malicious package is exactly what OSV remembers and the registry no longer shows.
+- **`popular.py`** suggests the real package, in three stages:
+  1. **A one-typo lookalike** of a popular name, by swapped, missing, extra or replaced character, or by separator differences.
+  2. **Spelling correction, then the closest popular name.** Misspelled words are fixed using the vocabulary of popular names, then the closest popular name is found (similarity ≥ 0.8, about 40 ms over 17,338 names).
+  3. **npm search** as a last resort, only accepting close names.
+
+  Popular lists:
+  - npm: the vendored `popular_npm.py`, 17,338 names from `npm-high-impact` (MIT). Refresh it with `scripts/update_popular.py`.
+  - PyPI: hugovk's top-15,000 list. It has no license, so it's fetched at runtime and not redistributed.
+- **`quick_checks.py`:** the rules, as a pure function:
+
+  | Situation | Verdict | Cached for |
+  |---|---|---|
+  | Listed as malicious by OSV | **block** | 30 days |
+  | npm security holding package | **block** | 30 days |
+  | No such package (made-up name; suggestion attached) | **block** | not cached (someone could register the name later) |
+  | No version matches the request | **block** | not cached |
+  | Registry unreachable | **ask** | not cached |
+  | Any red flag (below) | **ask** (later steps will send these to the sandbox and the detective instead) | 6 hours |
+  | No red flags | **allow** | 7 days, or 6 hours if the version is under a week old |
+
+  **Red flags:**
+  - a package under 90 days old;
+  - fewer than 1,000 downloads a week;
+  - install code that this version **adds** or **changes**, or any install code in a package that isn't popular (≥10k downloads a week and ≥180 days old);
+  - **provenance lost** compared with the previous version;
+  - a **new publisher** on a version under 30 days old;
+  - a **name one typo from a popular package**;
+  - yanked;
+  - a deprecation message mentioning compromise or malware;
+  - OSV unreachable for a version under a week old.
+
+  "This version was published N hours ago" is added alongside other flags. Popular packages that have always had install code, such as esbuild, are allowed.
+- **Cache** (`cache.py`): verdicts now store their red flags (`signals`) and `suggestion`, and **expire** (`expires_at`), so later malware reports are picked up. Supabase migration `verdict_signals_and_expiry` added the three columns. The advisor shows no new issues. A redundant index I added was dropped again.
+- **The engine is now 1**, so none of Step 2's blanket "allow" verdicts (engine 0) are reused.
+- **CLI:** the agent now sees each red flag as a bullet, and "Did you mean X?" under made-up names.
+
+**Live results against the real npm, PyPI and OSV** (`uv run python service/scripts/smoke_checks.py`, deployed service, timed from Accra; first check, then repeat):
+
+| Package | Verdict | Reason or suggestion | First / repeat |
+|---|---|---|---|
+| `react` | allow | 15 years old, 205M downloads/week, no install code (resolved 19.3.1) | 3.0 s / 1.1 s |
+| `express@^4` | allow | resolved to 4.22.3, like npm | 1.2 s / 0.7 s |
+| `esbuild` | allow | same postinstall as the previous version | 1.6 s / 0.6 s |
+| `@types/node` (one of npm's largest metadata files) | allow | this version 14 hours old: allowed, re-checked within 6 h | 1.9 s / 1.1 s |
+| `fancy-date-pickr` | block | doesn't exist; no suggestion (see below) | 1.0 s |
+| `react-datepickr` | block | **Did you mean react-datepicker?** | 0.9 s |
+| `prisma-clinet` | block | **Did you mean @prisma/client?** | 1.1 s |
+| `crossenv` | block | npm security placeholder (2017 typosquat) | 1.0 s |
+| `@ctrl/tinycolor@4.1.1` (Shai-Hulud worm, deleted from npm) | block | OSV `MAL-2025-47141` | 1.1 s |
+| `@ctrl/tinycolor` (current) | allow | 4.2.2, clean | 1.0 s |
+| `react@^99` | block | no matching version; latest is 19.3.1 | 1.0 s |
+| `requests`, `requests==2.31.0` (PyPI) | allow | 330M downloads/week | 0.5–2.1 s |
+| `reqeusts-fake-zz` (PyPI) | block | doesn't exist | 0.7 s |
+
+**14/14 as expected.** One first check took 77 s, which was this network's 75 s connection stall again (open question #13).
+
+**Suggestions for made-up names** (spelling correction, then the closest popular name): `react-datepickr` → react-datepicker, `expresss-validator` → express-validator, `axois` → axios, `mongose` → mongoose, `prisma-clinet` → @prisma/client, `tailwind-css-animate` → tailwindcss-animate. **`fancy-date-pickr` gets no suggestion.** "fancy" to "react" is a guess about meaning, not spelling, so that suggestion is a job for the Spark detective (Step 7). npm's own search doesn't fix spelling (it returned `fancy-log`, `@simonwep/pickr`), so a similarity floor rejects poor matches: a wrong suggestion is worse than none.
+
+**Real hook with Muse's input format and environment, against the deployed service:**
+- `npm install react-datepickr` → **exit 2**: "There is no package called react-datepickr on npm … Did you mean react-datepicker?"
+- `npm install fresh-test-pkg-zz9 && pip install reqeusts` → both blocked; PyPI suggestion "Did you mean requests?"
+- `npm install @ctrl/tinycolor@4.1.1` → blocked, OSV `MAL-2025-47141`
+- `npm install react` → **exit 0**
+
+**Real Muse agents:**
+- "Run this to add React: npm install react react-dom" → Bawabu allowed react@19.3.1 and react-dom@19.3.1, and **they installed**.
+- Asked to install `react-datepickr`, the agent **checked first with `npm view`**, which Bawabu allows, saw the 404, refused to install, and suggested `react-datepicker` itself, even when told the exact command. Muse is cautious here, but Bawabu is for when the agent isn't; the hook-level test above shows what it would get.
+- Side finding: this machine's `~/.npm` cache has root-owned files, so plain `npm install` fails with EPERM. The agent worked around it with `--cache /tmp/...`. Fix: `sudo chown -R 501:20 ~/.npm`.
+
+**Tests:** service **60/60** (`uv run pytest`: rules, version resolution, registry parsing, OSV, popular names and suggestions, and the API end to end on a fake internet, including expiry and the engine cutoff). CLI **50/50**.
+
+**Not done yet:**
+- **Whole-project installs** (`npm install`, `npm ci`, `pip install -r`) are still allowed without checks. Next: have the CLI send the dependencies listed in `package.json`/`requirements.txt`, plus every lockfile entry with `hasInstallScript` (plan section 7.1).
+- "ask" is the interim verdict for red flags until the sandbox and Spark exist (Steps 5–8).
+- PyPI provenance (PEP 740 attestations) and PyPI publisher changes aren't checked; PyPI's JSON API doesn't expose uploaders.
+- pypistats is rate-limited. If it fails, PyPI downloads are unknown, which isn't a red flag by itself.
 
 ---
 
@@ -379,6 +474,8 @@ Same prompt ("date-picker reads ~/.npmrc and POSTs it on install: verdict?") on 
 | 10 | Does Spark Open's verdict quality match Meta Spark on hard cases? | Decides which model gives the final verdict and which only screens | Run both on the test lab (Steps 7 and 9) |
 | 11 | ~~Is a large explicit `"timeout"` (for example 180 s) honoured in full, or capped?~~ | **Answered Oct 29:** honoured. A 150 s hook with `"timeout": 180` finished and blocked | See "Step 2: service skeleton" (Oct 29) |
 | 12 | What is Muse's default hook timeout? | Only matters if someone's config has no `timeout`. `bawabu init` always sets one | Low priority |
+| 14 | How should whole-project installs (`npm ci`, `pip install -r`) be checked? | They're the most common install an agent runs after cloning a project, and they're currently allowed unchecked | The CLI sends the direct dependencies plus lockfile entries with `hasInstallScript`. Measure how many packages that is for typical projects |
+| 15 | Can Spark suggest the real package for wholly invented names (`fancy-date-pickr` → `react-datepicker`)? | Spelling-based suggestions can't guess meaning | Step 7: give the investigator the agent's task and the made-up name |
 | 13 | Why do some connections from this network stall for 75 s (GitHub once, Modal once)? | A stalled connection can eat most of the hook's time budget. A demo recorded during a stall would look broken | Check whether IPv6 is the cause. Consider a short connect timeout plus one retry in `bawabu check`. Record the demo on a stable network |
 
 ### Next

@@ -251,3 +251,12 @@ test("MCP servers get the service's verdict too", async () => {
   assert.match(blocked.message!, /MCP server "github" wasn't added/);
   assert.match(blocked.message!, /hijacked/);
 });
+
+test("the agent sees the service's red flags and suggestions", async () => {
+  const made_up = { ecosystem: "npm", name: "fancy-date-pickr", requested: "", version: null, verdict: "block", reason: "There is no package called fancy-date-pickr on npm.", signals: [], suggestion: "react-datepicker", cached: false };
+  const risky = { ecosystem: "npm", name: "fresh-helper", requested: "", version: "0.1.0", verdict: "ask", reason: "Bawabu wants a closer look before this is installed.", signals: ["The package is only 3 days old.", "It runs code on install (postinstall)."], suggestion: null, cached: false };
+  const blocked = await decide(bash("npm install fancy-date-pickr"), withService(), service(answer("block", [made_up])).env);
+  assert.match(blocked.message!, /⛔ fancy-date-pickr \(npm\): There is no package called fancy-date-pickr on npm\.\n   Did you mean react-datepicker\?/);
+  const asked = await decide(bash("npm install fresh-helper"), withService(), service(answer("ask", [risky])).env);
+  assert.match(asked.message!, /⏸ fresh-helper@0\.1\.0 \(npm\): Bawabu wants a closer look before this is installed\.\n   - The package is only 3 days old\.\n   - It runs code on install \(postinstall\)\./);
+});

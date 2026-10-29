@@ -15,6 +15,10 @@ export interface PackageResult {
   version: string | null;
   verdict: Verdict;
   reason: string;
+  /** The red flags behind an ask or block, one sentence each. */
+  signals?: string[];
+  /** A real package the agent probably meant. */
+  suggestion?: string | null;
   cached: boolean;
 }
 

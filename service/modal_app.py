@@ -9,7 +9,7 @@ import modal
 
 image = (
     modal.Image.debian_slim(python_version="3.13")
-    .pip_install("fastapi>=0.115", "httpx>=0.27")
+    .pip_install("fastapi>=0.115", "httpx>=0.27", "packaging>=24", "semantic-version>=2.10")
     .add_local_python_source("bawabu_service")
 )
 app = modal.App("bawabu", image=image)

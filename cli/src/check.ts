@@ -178,7 +178,11 @@ function verdictMessage(subject: Subject, response: CheckResponse): string {
   const lines = [
     ...response.results
       .filter((r) => r.verdict !== "allow")
-      .map((r) => `${icon(r.verdict)} ${r.name}${r.version || r.requested ? `@${r.version ?? r.requested}` : ""} (${r.ecosystem}): ${r.reason}`),
+      .flatMap((r) => [
+        `${icon(r.verdict)} ${r.name}${r.version || r.requested ? `@${r.version ?? r.requested}` : ""} (${r.ecosystem}): ${r.reason}`,
+        ...(r.signals ?? []).map((s) => `   - ${s}`),
+        ...(r.suggestion ? [`   Did you mean ${r.suggestion}?`] : []),
+      ]),
     ...response.manifests.filter((m) => m.verdict !== "allow").map((m) => `${icon(m.verdict)} the project's ${m.manager} dependencies: ${m.reason}`),
   ];
   const what = subject.kind === "mcp" ? `the MCP server ${subject.servers.map((s) => `"${s}"`).join(", ")} wasn't added` : "this wasn't installed";
