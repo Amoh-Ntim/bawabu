@@ -11,11 +11,124 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Baseten open weights (`muse-spark-open-1026`): chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 4 checks pass, faster than the Meta API. See below |
 | Modal credits | 🟡 Approved | Oct 28: approved, credits being processed |
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
+| **Step 1: CLI and hook** (`bawabu init`, `bawabu check`) | ✅ **Done** | Oct 29. A real Muse agent's `npm install left-pad` was blocked, and allowed once allowlisted |
+| **Coverage: bun, pipx, script files, package.json scripts, MCP servers** | ✅ **Done** | Oct 29. 39 unit tests pass. Real agents blocked on `./setup.sh`, `bun run setup` and `pipx install`. MCP edits blocked at the hook |
 | Muse Code installed and signed in | ✅ Done | v1.4.13, at `~/.local/bin/muse` |
 | **Muse Code hook can block and message the agent** | ✅ **Proven** | Oct 27. See below |
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
 | One Modal sandbox command | ⏳ Waiting | Needs a Modal account and credits |
 | Public GitHub repo | ✅ Done | `Amoh-Ntim/bawabu`, created after kickoff |
+
+---
+
+## 2026-10-29 (Thu): Hook timeout and failure test, Step 1 CLI
+
+### Result
+
+- **A hook can take at least 90 s by default.** Muse waits for it, and an exit-2 block still works after the wait.
+- **The limit can be set per hook** with `"timeout": <seconds>` in `.muse/hooks.json`. Setting it to 5 got the hook killed after about 5 s.
+- ⚠️ **Muse fails open.** If a hook **times out** or **exits with anything other than 2**, the command **runs anyway, and the agent sees no warning.** Only exit code 2 blocks.
+
+### How we tested it
+
+Each run used a probe hook in a throwaway workspace and a real `muse exec` session (approvals and sandbox on, `--trust-workspace`). The agent was asked to run `touch ran-marker.txt && echo done`. If the marker file exists afterwards, the command ran.
+
+| Run | Hook behaviour | Hook config | What happened | Command ran? |
+|---|---|---|---|---|
+| A | Waits 90 s, then exits 2 | Default (no `timeout`) | Hook survived all 90 s. Agent got `tool blocked by hook: Blocked by Bawabu (timeout probe) after 90s`. Session took 146 s | ❌ No (blocked ✅) |
+| B | Waits 20 s, then exits 2 | `"timeout": 5` | Hook killed after about 4–5 s (last heartbeat: second 4). Agent got `done`, exit code 0, "No error message." | ⚠️ **Yes** |
+| C | Exits 1 immediately (simulated crash) | `"timeout": 30` | Agent got `done`, exit code 0, "No error message." | ⚠️ **Yes** |
+
+The agent tried the command once in each run and didn't retry.
+
+### What this changes in the build
+
+This is the most important hook finding so far. **Any slow path or bug in `bawabu check` would silently let packages through.** So:
+
+1. **`bawabu init` always writes an explicit `"timeout"`** (for example 180 s). We know the default is longer than 90 s, but not what it is.
+2. **`bawabu check` enforces its own deadline, well inside that limit** (for example 150 s). When the deadline is reached without a verdict, it **exits 2** with "Bawabu is still checking `<pkg>`, watch at /r/[id], retry in about a minute." The investigation keeps running in the cloud, and the retry gets the cached verdict. The "retry later" fallback is still needed, now as our own safety deadline, not because Muse's limit is short.
+3. **Every error in `bawabu check` ends in exit 2** in `block` mode: the whole check is wrapped in error handling, and a crash or unreachable service means "block, Bawabu couldn't check this". In `warn` mode, letting the command through is intended.
+4. **A missing or broken hook command fails open too** (for example if node moves or Bawabu is uninstalled, the shell returns 127, which isn't 2). `bawabu init` should run the hook once to confirm it works. A `bawabu doctor` command could recheck it later.
+
+### Step 1: CLI and hook
+
+**Result:** done. `bawabu init` installs the hook. In a real Muse session, the agent's `npm install left-pad` was **blocked with a Bawabu message, and the agent didn't try another way.** Once the package was allowlisted, the same request installed it.
+
+**What was built** (`cli/`, TypeScript, **no runtime dependencies**; `cli/.npmrc` sets `ignore-scripts=true` for our own dev dependencies):
+- **`parse.ts`:** reads a shell command the way a shell would (quotes, `&&`/`;`/`|`, redirections, `$(...)` and backticks, `sudo`/`env`/`VAR=` prefixes, `bash -c "..."`, `if/then`) and lists the installs it would run.
+  - Covered: npm (install/i/add/update/ci/exec/create/init), npx, pnpm (add/install/update/dlx/create), pnpx, yarn (bare/install/add/global add/up/dlx/create), pip/pip3/`python -m pip`, uv (pip install/add/sync/tool/run --with), uvx.
+  - Package specs: registry name and version, scoped names, `alias@npm:real`, git, URL and local path.
+  - **Flags what it can't read safely** (package name in a variable, `$(cat list)`, xargs, heredocs, unbalanced quotes) rather than guessing.
+- **`check.ts`:** the hook handler. It ignores Muse's internal tools and only looks at `bash`. Ordinary commands are allowed instantly.
+  - **Every failure exits 2:** unreadable input, a broken config, a crash, unreadable installs, and a 150 s deadline.
+  - Allowed without checking: allowlisted names and scopes (`@myorg/*`), local path installs, and `npx <bin>` when the project already has that binary.
+  - Everything else is blocked, for now, as "no service connected". Step 2 replaces this with the service's verdict.
+  - Every decision is logged to `~/.local/state/bawabu/checks.jsonl`.
+- **`init.ts`:** writes `.muse/hooks.json` with absolute `node` and CLI paths and `"timeout": 180`. Existing hooks are kept, and re-running replaces our hook instead of duplicating it. It writes `.muse/bawabu.json` (mode, serviceUrl, allowlist) and then **runs the hook three times the way Muse does** (`/bin/sh -c`, `PATH=/usr/bin:/bin…`): an install must exit 2, `git status` must exit 0, and a Muse internal tool must exit 0.
+- **`bawabu explain "<command>"`** shows what Bawabu sees in a command, for debugging.
+
+**Change from the plan: the config lives in `.muse/bawabu.json`, not `.bawabu.json`.** The agent can't write to `.muse/` without a human approving each write (Meta's guardrails recipe), so a prompt-injected agent can't turn Bawabu off or allowlist its own malware.
+
+**Tests:** 23 unit tests (`cd cli && npm test`), all passing. They include false positives that must **not** block: `echo "npm install foo"`, `git commit -m 'npm install foo'`, `echo $(npm --version)`. Writing them caught one real bug: `pkg @ https://…/x.whl` was labelled a local path (allowed) instead of a URL (checked). Fixed.
+
+**End-to-end with a real Muse agent** (fresh project, `bawabu init`, then `muse exec --trust-workspace "Add the left-pad npm package to this project."`):
+
+| Run | Config | What the agent did | Bawabu decision | Result |
+|---|---|---|---|---|
+| 1 | Default (block, no service) | `npm install left-pad --save` → got the Bawabu message → read `.muse/bawabu.json` → told the user how to allowlist it. **Didn't try another install method** | block (no service) | Nothing installed ✅ |
+| 2 | `"allowlist": ["left-pad"]` | Same install, retried once with a different npm cache | allow (allowlisted), twice | `left-pad@^1.3.0` installed ✅ |
+
+The agent's other commands in these runs (`ls`, `cat package.json`, `git status`) ran normally.
+
+**Not covered at this point:** bun, pipx, script files, package.json scripts and MCP servers. All of these were added later the same day; see the next section.
+
+### Coverage: bun, pipx, scripts and MCP servers
+
+**Result:** all four are covered. In real Muse sessions, agents were blocked when they ran `./setup.sh` (which runs `npm install left-pad`), `bun run setup` (a package.json script that runs `bun add is-odd`) and `pipx install httpie`. Each time the agent explained the block and **didn't try another way**. Adding an MCP server is blocked at the hook, tested with Muse's real input format against the real settings file.
+
+**What changed in `cli/`:** the parser is now three files.
+- **`shell.ts`:** the shell lexer. It now handles **heredocs** (`<<EOF`, `<<-`, `<<'EOF'`, `<<<`) and records what each command reads from stdin and which files it writes.
+- **`managers.ts`:** package managers. Added:
+  - **bun:** `add`/`a`, `install`/`i`, `update`, `x`, `bunx`, and `create` (both npm initializers and GitHub templates).
+  - **pipx:** `install`, `upgrade`, `inject`, `run` (`--spec`), `runpip`, and `install-all`/`reinstall`/`upgrade-all`.
+  - **Script detection:** `npm run`/`run-script`/`start`/`test`/`restart`, `pnpm run`/`pnpm <script>`, `yarn run`/`yarn <script>`, `bun run`/`bun <script>`.
+- **`parse.ts`:** follows commands into the code they run:
+  - **Script files:** `bash x.sh`, `sh -e x.sh`, `./x.sh` (by shebang; node/python scripts are skipped), `source`/`.`, `bash < file`, and heredocs or here-strings fed to a shell. A script file that doesn't exist or can't be read is blocked, which catches `curl -o x.sh … && sh x.sh`.
+  - **package.json scripts:** the named script plus its `pre`/`post` scripts, run in the package's own folder (`cd web &&`, `--prefix`, `--cwd`). A whole-project install (`npm install`, `npm ci`, `bun install`, …) also checks the project's own lifecycle scripts (`preinstall`, `postinstall`, `prepare`, …).
+  - **`cd` is tracked** across a command chain.
+  - **Scripts piped into a shell** (`curl … | sh`, `bash <(curl …)`, `cat <<EOF | sh`) are blocked, because Bawabu can't see what runs.
+  - Scripts that call each other in a loop stop at depth 6 and block.
+- **`mcp.ts` and `check.ts`:** MCP servers (details below).
+
+**MCP servers: how they're covered.** Muse starts MCP servers itself, not through the agent's shell, so a server like `npx -y some-mcp-server` would download and run a package the hook never sees. Bawabu catches it **when the server is added to a config file**:
+- **Where Muse keeps them:** `mcpServers` in `~/.config/muse/settings.json`, according to Muse's built-in `manage-settings` and `migrate` skills. Muse doesn't support MCP servers per project. Changes take effect at the next launch.
+- **How the agent adds one:** with its file tools. A probe captured the input the hook receives: `edit_file` sends `{"path", "find", "replace"}` and `write_file` sends `{"path", "content"}`. A shell edit is used only in YOLO mode.
+- **What Bawabu does:** for any `write_file`/`edit_file` on a `.json` file mentioning `mcpServers`/`mcp_servers`, it works out the file **as it would be after the edit**, compares the servers before and after, and checks every new server, or any server whose `command`/`args`/`url` changed, the same way as an install.
+  - Only changing `env` or `headers`, such as a new token, isn't treated as a new server.
+  - Covers Muse's `settings.json`, Claude Code's `~/.claude.json` (including `projects[...]`) and project `.mcp.json` files.
+  - A remote URL server is allowed, since nothing is installed locally.
+  - `docker`/`podman` servers are blocked, because Bawabu can't check container images.
+  - An MCP config Bawabu can't parse is blocked.
+- **Shell edits of MCP configs are blocked:** `> settings.json`, `tee`, `sed -i`, `cp`/`mv` onto the file, and `python`/`node` scripts that touch it. The message tells the agent to use the file tools instead, which Bawabu can inspect.
+
+**Hook-level test (MCP):** we sent the installed hook command (`/bin/sh`, cleared environment, as Muse runs it) the exact `edit_file`/`write_file` input Muse produces, targeting the real `~/.config/muse/settings.json`. Results:
+
+| Edit | Hook result |
+|---|---|
+| `edit_file` adds `github` (`npx -y @modelcontextprotocol/server-github`) to settings.json | ⛔ exit 2: "the MCP server "github" wasn't added. It would download and run @modelcontextprotocol/server-github (npm) every time Muse starts…" |
+| `write_file` creates `.mcp.json` with `fetch` (`uvx mcp-server-fetch`) | ⛔ exit 2, names `mcp-server-fetch (pypi)` |
+| `edit_file` adds a remote server (`streamable-http`, URL only) | ✅ exit 0 |
+
+The real settings file was unchanged afterwards (checksum compared). We **didn't** run a live agent against the real settings: Claude Code's safety classifier refused a probe that had an agent try to add an MCP server to the user's real Muse settings, even though the probe hook blocked every write. The live-agent MCP test is left for the user to run themselves.
+
+**Tests:** 39 unit tests, all passing. New cases cover bun, pipx, script files (a fake filesystem), heredocs (code fed to a shell versus data written to a file), package.json scripts and lifecycle scripts, the depth limit, `curl | sh`, shell edits of MCP configs, and MCP file edits (added versus changed versus token-only, remote, local, docker, allowlisted, unparseable).
+
+**Still not covered:**
+- **Node and Python scripts** that install from inside their code (for example `node setup.js` calling `execSync('npm install …')`). Bawabu only reads shell scripts.
+- **Makefiles** (`make setup`).
+- **Commands passed as data to other tools**, such as `find -exec`, `watch` and `nodemon --exec`.
+- **Remote URL MCP servers** pass, because nothing is installed locally. They aren't vetted beyond that.
+- Muse auto-updated from 1.4.13 to 1.4.14 during the day. The hook format still worked, but these tests should be re-run after Muse updates.
 
 ---
 
@@ -194,16 +307,18 @@ Same prompt ("date-picker reads ~/.npmrc and POSTs it on install: verdict?") on 
 
 | # | Question | Why it matters | How to find out |
 |---|---|---|---|
-| 1 | **How long can a hook run before Muse kills it, and what's the config field for the timeout?** | A full investigation takes about 1–1.5 min (measured Spark speed). If hooks time out sooner, the hook replies quickly ("checking, watch live at /r/[id], retry in about a minute"), the investigation keeps running in the cloud, the live report page shows progress, and the agent's retry hits the cached verdict | Run a hook that sleeps for 90 s |
+| 1 | ~~How long can a hook run before Muse kills it, and what's the config field for the timeout?~~ | **Answered Oct 29:** at least 90 s by default; set per hook with `"timeout": <seconds>`. ⚠️ A timeout or any exit code other than 2 **lets the command run, silently** | See "Hook timeout and failure test" (Oct 29) |
 | 2 | Does `"matcher": "bash"` limit the hook to shell calls? | Fewer hook runs means less overhead (we filter in code either way) | Probe with a matcher |
 | 3 | Do user-level hooks in `settings.json` behave the same? | Decides how `bawabu init` installs the hook | Probe |
-| 4 | How does the agent add an MCP server: by editing a settings file, or with a command? | The plan says we intercept new MCP servers too | Ask the agent to add one and watch the hook log |
+| 4 | ~~How does the agent add an MCP server: by editing a settings file, or with a command?~~ | **Answered Oct 29:** with `edit_file`/`write_file` on `mcpServers` in `~/.config/muse/settings.json`. `muse mcp` only logs in and out. Covered | See "Coverage: bun, pipx, scripts and MCP servers" (Oct 29) |
 | 5 | Does the interactive TUI behave the same as `muse exec`? | The demo uses the TUI | Run the same test in the TUI |
 | 6 | Can a JSON reply on stdout (`hookSpecificOutput`) give richer feedback than exit 2? | A nicer message for the agent | Probe |
 | 7 | ~~Does the API accept a reasoning-effort setting, and does lower effort cut latency?~~ | **Answered Oct 27:** yes. `minimal` is about 3 times faster (2.3 s against 7 s) with the same verdict on an easy case. Still to check: verdict quality on hard cases | See "Why Spark is slow" above. Recheck in Step 7 on the test lab |
 | 8 | How does the regular `muse-spark-1.3` compare with the contributor model on speed and quality? | The plan uses the regular model for the final demo | Run `smoke_spark.py --model muse-spark-1.3` |
 | 9 | Can we control reasoning on Baseten's Spark Open (it "always reasons"), and how do we read its reasoning output? | Even lower latency for the screener, and the reasoning could be shown on the live page | Try `reasoning_effort` on Baseten. Read Baseten's "Reasoning" doc page |
 | 10 | Does Spark Open's verdict quality match Meta Spark on hard cases? | Decides which model gives the final verdict and which only screens | Run both on the test lab (Steps 7 and 9) |
+| 11 | Is a large explicit `"timeout"` (for example 180 s) honoured in full, or capped? | Our own deadline sits inside it. If Muse caps it lower, a slow check could fail open | Step 1: run a hook for 150 s with `"timeout": 180` |
+| 12 | What is Muse's default hook timeout? | Only matters if someone's config has no `timeout`. `bawabu init` always sets one | Low priority |
 
 ### Next
 
