@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { DEFAULT_SERVICE_URL } from "./constants.js";
 
 export interface Config {
   /** block: stop anything unchecked or unsafe. warn: never block (for trying Bawabu out). */
@@ -8,7 +9,7 @@ export interface Config {
   allowlist: string[];
 }
 
-export const DEFAULT_CONFIG: Config = { mode: "block", serviceUrl: null, allowlist: [] };
+export const DEFAULT_CONFIG: Config = { mode: "block", serviceUrl: DEFAULT_SERVICE_URL, allowlist: [] };
 
 /** Package lists only travel over HTTPS, except to a service on this machine. */
 export const isValidServiceUrl = (url: string) => /^https:\/\/[^\s/]+|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url);

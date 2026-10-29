@@ -13,7 +13,7 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
 | **Step 1: CLI and hook** (`bawabu init`, `bawabu check`) | ✅ **Done** | Oct 29. A real Muse agent's `npm install left-pad` was blocked, and allowed once allowlisted |
 | **Coverage: bun, pipx, script files, package.json scripts, MCP servers** | ✅ **Done** | Oct 29. 39 unit tests pass. Real agents blocked on `./setup.sh`, `bun run setup` and `pipx install`. MCP edits blocked at the hook |
-| **Step 2: service skeleton** (`POST /check` on Modal, verdict cache, CLI to service) | 🟡 **Working, cache not yet permanent** | Oct 29. A real agent's install went from the hook to the service, got `allow`, and ran. Deployed at `https://amohntim123--bawabu.us-east.modal.run`. The cache is in memory until the Supabase project exists (waiting on the user to create a "Bawabu" organization) |
+| **Step 2: service skeleton** (`POST /check` on Modal, verdict cache, CLI to service) | ✅ **Done** | Oct 29. A real agent's install went from the hook to the service, got `allow`, and ran. Deployed at `https://amohntim123--bawabu.us-east.modal.run` with the Supabase verdict cache. `bawabu init` uses it by default |
 | Muse Code installed and signed in | ✅ Done | v1.4.13, at `~/.local/bin/muse` |
 | **Muse Code hook can block and message the agent** | ✅ **Proven** | Oct 27. See below |
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
@@ -176,9 +176,18 @@ The real settings file was unchanged afterwards (checksum compared). We **didn't
     - Both rows are in `public.verdicts` (engine 0).
   - **The lock holds:** with the publishable key, reading the table returns `[]`, and writing a forged `allow` verdict is refused (HTTP 401, "new row violates row-level security policy"). Only the service's secret key can write verdicts.
   - Where each key lives: `SUPABASE_SECRET_KEY` in `.env` and the Modal secret `bawabu-supabase`. `META_API_KEY` and `BASETEN_API_KEY` go in their own Modal secrets once the service uses them (Steps 7 and 9). No key is ever stored in the database.
-  - Remaining: **the user creates the Modal secret** (Claude Code's safety system doesn't allow it to write to secret stores), then redeploy. `service/modal_app.py` already requires that secret.
-  - Note: the project is in eu-west-1 and Modal runs in us-east, so each cache query crosses the Atlantic. Measure this once deployed.
-- **Default service URL:** `bawabu init` should use the deployed URL by default, so users don't need `--service`.
+  - **Connected in the cloud (done).** The user created the Modal secret `bawabu-supabase` (type Custom). Claude Code's safety system doesn't allow it to write to secret stores. Results after redeploying:
+
+    | What | Result |
+    |---|---|
+    | Cloud `/health` | `cache: supabase` (5.1 s cold start) |
+    | Cloud `/check` with `is-odd@3.0.1` and `left-pad@1.3.0` | Call 1: is-odd fresh, **left-pad cached** (written by the local test, so verdicts are shared across machines and restarts), 2.5 s. Later calls: both cached, about 3 s |
+    | Real hook command (Muse input format, cleared env) to the cloud: `npm install is-even@1.0.0`, twice | allow, **2.19 s** (fresh), then **2.02 s** (cached) |
+    | Rows in `public.verdicts` | 4: left-pad, requests, is-odd, is-even (all engine 0) |
+
+    Compared with the in-memory deployment (1.6 s), Supabase adds roughly 0.4–0.6 s per hook call, which includes the Modal (us-east) to Supabase (eu-west-1) round trips. That's acceptable for now.
+  - ⚠️ **One outlier: a single `/check` took 76.6 s.** That's almost exactly macOS's 75 s TCP connection timeout plus a normal reply, the same pattern as the user's GitHub push error ("Failed to connect … after 75003 ms"). So it was **this network failing to connect once, not the service**: every other request took 2–3 s. For the demo, record on a stable network (see open question #13).
+- ~~**Default service URL**~~ **Done:** `bawabu init` now uses `https://amohntim123--bawabu.us-east.modal.run` by default, so `--service` is only needed to point somewhere else. A fresh `bawabu init` with no flags reported "Service reachable … cache supabase". Unit tests never touch the network: the test config sets the service to `null` unless a test supplies a fake one.
 - **No auth or rate limit** on the public endpoint yet. That matters before the endpoint starts spending Spark credits (Step 7).
 
 ---
@@ -370,6 +379,7 @@ Same prompt ("date-picker reads ~/.npmrc and POSTs it on install: verdict?") on 
 | 10 | Does Spark Open's verdict quality match Meta Spark on hard cases? | Decides which model gives the final verdict and which only screens | Run both on the test lab (Steps 7 and 9) |
 | 11 | ~~Is a large explicit `"timeout"` (for example 180 s) honoured in full, or capped?~~ | **Answered Oct 29:** honoured. A 150 s hook with `"timeout": 180` finished and blocked | See "Step 2: service skeleton" (Oct 29) |
 | 12 | What is Muse's default hook timeout? | Only matters if someone's config has no `timeout`. `bawabu init` always sets one | Low priority |
+| 13 | Why do some connections from this network stall for 75 s (GitHub once, Modal once)? | A stalled connection can eat most of the hook's time budget. A demo recorded during a stall would look broken | Check whether IPv6 is the cause. Consider a short connect timeout plus one retry in `bawabu check`. Record the demo on a stable network |
 
 ### Next
 

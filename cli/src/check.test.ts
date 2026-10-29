@@ -9,7 +9,8 @@ const SETTINGS = "/home/u/.config/muse/settings.json";
 const bash = (command: string, extra: object = {}) =>
   JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "bash", tool_input: { command }, cwd: "/tmp/project", ...extra });
 const tool = (tool_name: string, tool_input: object) => JSON.stringify({ hook_event_name: "PreToolUse", tool_name, tool_input, cwd: "/tmp/project" });
-const config = (overrides: Partial<Config> = {}) => () => ({ ...DEFAULT_CONFIG, ...overrides });
+/** No service unless a test sets one, so tests never touch the network. */
+const config = (overrides: Partial<Config> = {}) => () => ({ ...DEFAULT_CONFIG, serviceUrl: null, ...overrides });
 const broken = () => {
   throw new Error("bad json");
 };

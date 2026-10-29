@@ -6,6 +6,9 @@ export const HOOK_TIMEOUT_SECONDS = 180;
 /** `bawabu check` gives up and blocks well before Muse's timeout. */
 export const CHECK_DEADLINE_SECONDS = 150;
 
+/** The hosted Bawabu service; `bawabu init --service <url>` points a project elsewhere. */
+export const DEFAULT_SERVICE_URL = "https://amohntim123--bawabu.us-east.modal.run";
+
 /** How long to wait for the service's verdict, inside the deadline above. */
 export const SERVICE_TIMEOUT_SECONDS = 140;
 
