@@ -1,6 +1,8 @@
 """Deploys the Bawabu service on Modal. From the repo root:
 
     uv run modal deploy service/modal_app.py
+
+Needs the Modal secret `bawabu-supabase` (SUPABASE_URL, SUPABASE_SECRET_KEY) for the verdict cache.
 """
 
 import modal
@@ -13,7 +15,11 @@ image = (
 app = modal.App("bawabu", image=image)
 
 
-@app.function(timeout=180, scaledown_window=300)
+@app.function(
+    secrets=[modal.Secret.from_name("bawabu-supabase", required_keys=["SUPABASE_URL", "SUPABASE_SECRET_KEY"])],
+    timeout=180,
+    scaledown_window=300,
+)
 @modal.concurrent(max_inputs=100)
 @modal.asgi_app(label="bawabu")
 def web():

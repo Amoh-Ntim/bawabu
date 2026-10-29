@@ -166,7 +166,18 @@ The real settings file was unchanged afterwards (checksum compared). We **didn't
 **Open question #11 answered: Muse honours a 180 s hook timeout.** A probe hook that ran for 150 s with `"timeout": 180` survived to the end and blocked, and the command never ran. Bawabu's own 150 s deadline inside the 180 s timeout is therefore safe.
 
 **Not done yet in Step 2:**
-- **Permanent cache:** waiting for the Supabase project. Then: create the `verdicts` table (RLS on), store `SUPABASE_URL` and `SUPABASE_SECRET_KEY` as a Modal secret, and redeploy.
+- **Permanent cache:** the Supabase **Bawabu** organization and project (`ruwvannqkvunasynlowz`, eu-west-1) exist, and the `verdicts` table has been created through the Supabase MCP:
+  - `unique (ecosystem, name, version)` for upserts, `engine` and `updated_at` columns, and check constraints on every field.
+  - **RLS is on with no policies**, so the publishable key can't read or write it. Only the service's secret key can.
+  - The security advisor shows two expected items: "RLS enabled, no policy" (intended), and a warning about Supabase's own `rls_auto_enable()` event-trigger function being callable. That warning is harmless, because Postgres won't run an event-trigger function called directly.
+  - **Tested locally** (the service on this machine, reading `.env`): `/health` reported `cache: supabase`.
+    - The first `/check` for `left-pad@1.3.0` and `requests==2.31.0` wrote both verdicts (1.5 s).
+    - The second came back `cached` from Supabase (0.2 s).
+    - Both rows are in `public.verdicts` (engine 0).
+  - **The lock holds:** with the publishable key, reading the table returns `[]`, and writing a forged `allow` verdict is refused (HTTP 401, "new row violates row-level security policy"). Only the service's secret key can write verdicts.
+  - Where each key lives: `SUPABASE_SECRET_KEY` in `.env` and the Modal secret `bawabu-supabase`. `META_API_KEY` and `BASETEN_API_KEY` go in their own Modal secrets once the service uses them (Steps 7 and 9). No key is ever stored in the database.
+  - Remaining: **the user creates the Modal secret** (Claude Code's safety system doesn't allow it to write to secret stores), then redeploy. `service/modal_app.py` already requires that secret.
+  - Note: the project is in eu-west-1 and Modal runs in us-east, so each cache query crosses the Atlantic. Measure this once deployed.
 - **Default service URL:** `bawabu init` should use the deployed URL by default, so users don't need `--service`.
 - **No auth or rate limit** on the public endpoint yet. That matters before the endpoint starts spending Spark credits (Step 7).
 
