@@ -184,7 +184,7 @@ function verdictMessage(subject: Subject, response: CheckResponse, serviceUrl: s
         `${icon(r)} ${r.name}${r.version || r.requested ? `@${r.version ?? r.requested}` : ""} (${r.ecosystem}): ${r.reason}`,
         ...(r.signals ?? []).map((s) => `   - ${s}`),
         ...(r.suggestion ? [r.report_id ? `   A safer choice: ${r.suggestion}.` : `   Did you mean ${r.suggestion}?`] : []),
-        ...(r.report_id ? [`   Details: ${base}/investigations/${r.report_id}`] : []),
+        ...(r.report_id ? [`   Details: ${base}/r/${r.report_id}`] : []),
       ]),
     ...response.manifests.filter((m) => m.verdict !== "allow").map((m) => `${icon(m)} the project's ${m.manager} dependencies: ${m.reason}`),
   ];

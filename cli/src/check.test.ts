@@ -217,7 +217,7 @@ test("an investigated block shows its evidence, a safer choice and the report li
   assert.match(d.message!, /- scripts\/setup\.js:12: reads ~\/\.npmrc/);
   assert.match(d.message!, /A safer choice: dotenv\./);
   assert.doesNotMatch(d.message!, /Did you mean/);
-  assert.match(d.message!, /Details: https:\/\/bawabu\.example\/investigations\/abc-123/);
+  assert.match(d.message!, /Details: https:\/\/bawabu\.example\/r\/abc-123/);
 });
 
 test("a still-running investigation tells the agent to wait and retry, not to ask the user", async () => {

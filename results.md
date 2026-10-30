@@ -11,7 +11,8 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Baseten open weights (`muse-spark-open-1026`): chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 4 checks pass, faster than the Meta API. See below |
 | Modal credits | 🟡 Approved | Oct 28: approved, credits being processed |
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
-| **Step 9: open-weights layer** (Muse Spark Open screener on Baseten + `--open-weights` investigator) | 🟡 **Built, deploy pending** | Oct 30. Screener clears benign flagged packages in ~5–7 s and sends risky ones on in ~1.3 s by rule. Test lab: the clean one cleared, every risky one escalated (incl. the malicious-dependency one). Real little-used npm packages: 4/7 cleared, 3 escalated by the dependency gate. Open-weights investigator: CI-gated caught via its own re-run, legit allowed. Deploy waits for `BASETEN_API_KEY` in the Modal secret |
+| **Step 10: report page** (`/r/<id>` live report, `/live` follow mode) | ✅ **Done** | Oct 30. Served by the Modal service, no new app. Verdict, Spark's steps live, verified evidence with the cited code highlighted, sandbox runs (STOLEN rows), diff, hard rules, discarded claims. Strict CSP + text-only rendering of package content. A real Muse agent's block message linked to the report |
+| **Step 9: open-weights layer** (Muse Spark Open screener on Baseten + `--open-weights` investigator) | ✅ **Done** | Oct 30. Screener clears benign flagged packages in ~5–7 s and sends risky ones on in ~1.3 s by rule. Test lab: the clean one cleared, every risky one escalated (incl. the malicious-dependency one). Real little-used npm packages: 4/7 cleared, 3 escalated by the dependency gate. Open-weights investigator: CI-gated caught via its own re-run, legit allowed. **Deployed:** live `/check` cleared docs-gen-postinstall 1.0.0 via the screener, and an `open_weights` request blocked color-hex-convert (injection + leak) |
 | **Step 7: Muse Spark investigator** (tools, loop, verified evidence, hard rules, events, registry routing, service wiring) | ✅ **Done** | Oct 30. Test lab **7/7 correct** (5 blocked incl. CI-gated and date-gated via Spark's own sandbox re-runs and an obfuscated payload Spark decoded itself; 2 legit allowed). **Deployed**; a real Muse agent's `npm install date-fns-lite-utils` was blocked after a live in-hook investigation (126 s session), with line-cited evidence and a report link; the agent didn't retry another way |
 | **Step 6: diff engine** (previous-version fetch, in-memory unpack, static signals, what's new) | ✅ **Done** | Oct 30. Hijacked docs-gen-postinstall 2.0.0 flagged HIGH with the exact story; catches the base64 fixture the sandbox missed. 12 popular npm packages (esbuild, sharp, next, core-js, puppeteer, …): all NONE except bcrypt 6.0.0 MEDIUM |
 | **Step 5: sandbox X-ray** (locked Modal sandbox, canaries, strace, fake-internet sink, evidence) | ✅ **Done** | Oct 30. Token-stealer caught (canary POST intercepted over HTTPS); transitive-dep, CI-gated and date-gated variants caught; 3 legit packages not flagged. Trigger-aware re-runs (env + faketime) also working |
@@ -25,6 +26,66 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
 | One Modal sandbox command | ✅ **Proven** | Oct 28 (smoke) and Oct 30 (full X-ray runs) |
 | Public GitHub repo | ✅ Done | `Amoh-Ntim/bawabu`, created after kickoff |
+
+---
+
+## 2026-10-30 (Fri): Step 10 — the report page
+
+### Result
+
+Every investigation now has a page anyone can read: **`/r/<id>`**, served by the existing Bawabu service on Modal
+(no separate Next.js app to host). The agent's block message links to it. **`/live`** follows whichever investigation
+starts next, for the demo's split screen: open it, then let the agent run `npm install`.
+
+What the page shows, top to bottom: the package and verdict (BLOCKED / ALLOWED / NEEDS A HUMAN / INVESTIGATING), the
+reason, chips (confidence, which model, tool calls, sandbox re-runs, time, safer choice); **the investigation step by
+step** with timings (stages, Spark's narration in violet, each tool call, the re-run highlighted in amber, hard rules in
+red, the final verdict); **the evidence**, each item "✓ verified", with the cited code shown in context and the line
+highlighted; **the sandbox** run by run ("Run 2: re-run by Spark with CI=true", STOLEN rows in red); **what changed
+since the previous version**; the hard rules; and the claims Spark couldn't back up (folded).
+
+**End to end (deployed, real Muse agent):** `npm install env-loader-plus` → blocked after a fresh investigation → the
+agent's message ended with `Details: …/r/27336358-…` and it said it would not try another way. The linked page showed
+the leaked canary, then `scripts/setup.js` lines 12, 15 and 17 highlighted, all verified. Also checked on the deployed
+service: the obfuscated fixture's report (with a **DECODED** evidence item), and `/live` picking up a running
+investigation (checked locally with a half-finished one, since deployed investigations kept finishing in under a
+minute, before the screenshot).
+
+### Security
+
+- **Package text is untrusted** (code, Spark's words, hostnames can all carry `<script>`): the page builds the DOM
+  with `textContent` only. A test fails if `innerHTML`, `insertAdjacentHTML` or `document.write` ever appear.
+- **Strict CSP** with a fresh nonce per response: `default-src 'none'; script-src 'nonce-…'; connect-src 'self';
+  frame-ancestors 'none'`, plus `nosniff`, `no-referrer`, `no-store`.
+- **Private registries:** reports keep the verdict, the reason and *where* (file:line) but drop code (snippets,
+  quotes, tool output, sandbox output). A registry can be marked `show_code`; only the test lab is
+  (`LAB_REGISTRY_SHOW_CODE=1`), because its code is our own harmless fixtures.
+- **The live feed** (`GET /investigations`) lists package names from every client, so it's **off unless
+  `BAWABU_PUBLIC_FEED=1`**. On for our deployment (only the test lab feeds it). It never returns registry addresses.
+
+### Polish from looking at screenshots
+
+- Routine tool results (file names, `"version": "1.0.0"`) hidden; the re-run shown once, highlighted.
+- The final verdict row was picking up the verdict panel's styles through a shared class name; renamed.
+- The package name couldn't shrink in its flex row on narrow screens; fixed (checked at 500 px).
+- `/live` showed an empty "Investigating…" panel while nothing was happening; now a proper "Watching for the next check".
+- "Decoding a base64 string (0 chars)" when Spark decodes from a file; now "Decoding the base64 string on build.js:6".
+
+### Tests
+
+**Python 122** (+6: page served with a CSP whose nonce matches the script; no HTML insertion of data; public report
+shows code; private report hides code but keeps verdict and file:line; `show_code` registries keep code, others don't;
+the feed is off unless turned on and never leaks registry addresses. Plus the pipeline now stores snippets, the first
+sandbox run and the diff summary). **CLI 60** (the details link now points at `/r/<id>`).
+
+### For the demo
+
+- Open `https://amohntim123--bawabu.us-east.modal.run/live` on the right, Muse Code on the left.
+- `/live` only follows **new** investigations. Verdicts are cached (block: 30 days), so a retake with the same package
+  shows nothing new. Retakes need a package version that hasn't been checked yet, or a way to reset the lab's cached
+  verdicts (to build before recording).
+- Spark keeps calling the fixtures' "BAWABU TEST FIXTURE — harmless" banners a manipulation attempt. Those banners are
+  part of the fixtures' safety labelling, so they stay; worth knowing before recording, since it shows up in the reasons.
 
 ---
 
@@ -86,8 +147,10 @@ injection text is a gate; the open-weights flag reaches the investigation. +1 de
 
 ### To do
 
-- Create the `bawabu-baseten` Modal secret (BASETEN_API_KEY only; `bawabu-investigator` is unchanged), deploy, and
-  check the screener and open-weights mode on the deployed service.
+- ✅ Done: secret `bawabu-baseten` (BASETEN_API_KEY only) created by the user; deployed. `/health` shows `screener: true`.
+  Live: docs-gen-postinstall 1.0.0 **cleared by the screener** ("no install scripts and index.js only exports a pure
+  string-length docs generator…"), then cached. An `open_weights: true` request for color-hex-convert ran the
+  investigation on Spark Open and **blocked** it, citing the injection (index.js:7) and the leaked canary.
 - Possible refinement: screen dependencies one level deep instead of requiring them to pass the quick checks, so
   small packages that depend on their author's other small packages can be cleared too.
 

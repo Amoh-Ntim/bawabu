@@ -4,9 +4,12 @@
 """
 
 import asyncio
+import os
+import secrets
 
 import httpx
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 
 from . import __version__
 from .cache import Cache, cache_from_env
@@ -14,17 +17,49 @@ from .investigations import Investigations, Store
 from .models import CheckRequest, CheckResponse
 from .net import new_client
 from .registry import Source, sources_from_env
+from .report_page import PAGE
 from .screener import Screener
 from .verdicts import ENGINE, judge, judge_manifest, overall
 
 # How many packages one request judges at once (each one fetches registry metadata).
 PARALLEL_JUDGEMENTS = 8
+HIDDEN = "(hidden: private registry)"
+
+
+def redact(result: dict | None, events: list[dict]) -> tuple[dict | None, list[dict]]:
+    """For packages from a private registry: keep the verdict and the story, drop the code (snippets, quotes, tool
+    output), since anyone with the link can open the report."""
+    if result:
+        result = {**result, "snippets": {}}
+        for key in ("evidence", "rejected"):
+            result[key] = [{**e, "quote": None} for e in result.get(key) or []]
+        for key in ("sandbox",):
+            if result.get(key):
+                result[key] = {**result[key], "output": None}
+        result["reruns"] = [{**r, "output": None} for r in result.get("reruns") or []]
+    events = [{**e, "title": HIDDEN} if e.get("kind") == "result" else e for e in events]
+    return result, events
+
+
+def page_response() -> HTMLResponse:
+    """The report page with a fresh nonce: only its own script may run, and it may only talk to this service."""
+    nonce = secrets.token_urlsafe(16)
+    return HTMLResponse(PAGE.replace("__NONCE__", nonce), headers={
+        "Content-Security-Policy": f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'unsafe-inline'; "
+                                   "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+        "Cache-Control": "no-store",
+    })
 
 
 def create_app(cache: Cache | None = None, client: httpx.AsyncClient | None = None, *,
                investigations: Investigations | None = None, sources: dict[str, Source] | None = None,
-               screener: Screener | None = None) -> FastAPI:
-    """Without `investigations`, suspicious packages get the quick checks' "ask" (local runs and tests)."""
+               screener: Screener | None = None, public_feed: bool | None = None) -> FastAPI:
+    """Without `investigations`, suspicious packages get the quick checks' "ask" (local runs and tests).
+    `public_feed` (default: BAWABU_PUBLIC_FEED=1) lists recent investigations for the /live page; it shows package
+    names from every client, so it's off unless the operator turns it on."""
+    public_feed = os.environ.get("BAWABU_PUBLIC_FEED") == "1" if public_feed is None else public_feed
     cache = cache or cache_from_env()
     client = client or new_client()
     sources = sources_from_env() if sources is None else sources
@@ -45,9 +80,29 @@ def create_app(cache: Cache | None = None, client: httpx.AsyncClient | None = No
             row = None
         if not row:
             raise HTTPException(404, "no such investigation")
+        result, events = row.get("result"), await store.events(inv_id)
+        known = sources.get(row.get("registry") or "")
+        if row.get("registry") and not (known and known.show_code):
+            result, events = redact(result, events)
         return {"id": inv_id, "package": {k: row.get(k) for k in ("ecosystem", "name", "version")},
-                "private_registry": bool(row.get("registry")), "status": row["status"],
-                "result": row.get("result"), "events": await store.events(inv_id)}
+                "private_registry": bool(row.get("registry")), "code_hidden": bool(row.get("registry")) and not (known and known.show_code),
+                "status": row["status"], "result": result, "events": events}
+
+    @app.get("/investigations")
+    async def recent(limit: int = 10) -> list[dict]:
+        if not (public_feed and investigations):
+            raise HTTPException(404, "the live feed is off")
+        rows = await investigations.store.recent(max(1, min(limit, 25)))
+        return [{k: r.get(k) for k in ("id", "name", "version", "status", "verdict", "created_at")} | {"private_registry": bool(r.get("registry"))}
+                for r in rows]
+
+    @app.get("/r/{inv_id}", response_class=HTMLResponse, include_in_schema=False)
+    async def report(inv_id: str) -> HTMLResponse:
+        return page_response()
+
+    @app.get("/live", response_class=HTMLResponse, include_in_schema=False)
+    async def live() -> HTMLResponse:
+        return page_response()
 
     @app.post("/check")
     async def check(request: CheckRequest) -> CheckResponse:

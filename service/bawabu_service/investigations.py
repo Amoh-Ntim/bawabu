@@ -72,6 +72,10 @@ class Store(Protocol):
 
     async def events(self, inv_id: str) -> list[dict]: ...
 
+    async def recent(self, limit: int) -> list[dict]:
+        """The newest investigations: id, package, status, verdict and when, newest first."""
+        ...
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -111,6 +115,11 @@ class MemoryStore:
 
     async def events(self, inv_id: str) -> list[dict]:
         return list(self.event_log.get(inv_id, []))
+
+    async def recent(self, limit: int) -> list[dict]:
+        rows = sorted(self.rows.values(), key=lambda r: r["created_at"], reverse=True)[:limit]
+        return [{"id": r["id"], "name": r["name"], "version": r["version"], "registry": r["registry"], "status": r["status"],
+                 "verdict": (r.get("result") or {}).get("verdict"), "created_at": str(r["created_at"])} for r in rows]
 
 
 class SupabaseStore:
@@ -161,9 +170,36 @@ class SupabaseStore:
             "select": "seq,event,created_at", "investigation_id": f"eq.{inv_id}", "order": "seq.asc"})
         return [{"seq": row["seq"], **row["event"]} for row in r.json()]
 
+    async def recent(self, limit: int) -> list[dict]:
+        r = await self._req("GET", "investigations", params={
+            "select": "id,name,version,registry,status,created_at,verdict:result->>verdict",
+            "order": "created_at.desc", "limit": str(limit)})
+        return r.json()
+
 
 def _when(value: datetime | str) -> datetime:
     return value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
+def diff_summary(report: diff.DiffReport) -> dict:
+    """What the report page shows about the version comparison."""
+    return {"risk": report.risk, "previous": report.previous, "added": report.added[:50], "changed": report.changed[:50],
+            "removed": report.removed[:50], "signals": report.headline(10)}
+
+
+def snippets(inv: investigator.Investigation, files: dict[str, bytes], around: int = 4) -> dict[str, dict]:
+    """The code around each verified code citation ("file:line" -> first line number + lines), for the report page."""
+    out: dict[str, dict] = {}
+    for e in inv.evidence:
+        if e.type != "code" or not e.file or not e.line or e.file not in files:
+            continue
+        text = diff._text(e.file, files[e.file])
+        if text is None:
+            continue
+        lines = text.splitlines()
+        start = max(1, e.line - around)
+        out[f"{e.file}:{e.line}"] = {"start": start, "lines": [l[:220] for l in lines[start - 1: e.line + around]]}
+    return out
 
 
 def store_from_env() -> Store:
@@ -264,7 +300,8 @@ async def run(inv_id: str, payload: dict, *, store: Store, cache: Cache, http: h
                                                    "signals": payload.get("signals") or []})
         rerun = (lambda env, date: box(report.version, env, date)) if sandbox else None
         inv = await asyncio.to_thread(investigator.investigate, material, spark, model, rerun=rerun, emit=emit, reasoning_effort=effort)
-        result = {**inv.to_dict(), "version": report.version, "previous": report.previous}
+        result = {**inv.to_dict(), "version": report.version, "previous": report.previous,
+                  "sandbox": first, "diff": diff_summary(report), "snippets": snippets(inv, report.contents)}
         verdict = CachedVerdict(inv.verdict, inv.reason, engine, tuple(outcome_from_result(result, inv_id).signals), inv.safe_alternative)
         try:
             await cache.put(payload["ecosystem"], name, report.version, verdict, TTL[inv.verdict], registry=payload["registry_key"])

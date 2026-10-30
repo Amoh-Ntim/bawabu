@@ -70,6 +70,8 @@ class Source:
 
     url: str = NPM
     headers: tuple[tuple[str, str], ...] = ()
+    # Reports for this private registry may show code (the test lab's own fixtures). Off for real private code.
+    show_code: bool = False
 
     @property
     def public(self) -> bool:
@@ -89,10 +91,11 @@ def clean_url(value: str) -> str | None:
 
 def sources_from_env() -> dict[str, Source]:
     """Private registries the service can read, by URL: the test lab's Verdaccio when LAB_REGISTRY_URL and
-    LAB_REGISTRY_AUTH (its HTTP Basic login) are set."""
+    LAB_REGISTRY_AUTH (its HTTP Basic login) are set. LAB_REGISTRY_SHOW_CODE=1 lets its reports show code."""
     url, auth = os.environ.get("LAB_REGISTRY_URL"), os.environ.get("LAB_REGISTRY_AUTH")
     key = clean_url(url) if url else None
-    return {key: Source(key, (("authorization", f"Basic {auth}"),))} if key and auth else {}
+    show = os.environ.get("LAB_REGISTRY_SHOW_CODE") == "1"
+    return {key: Source(key, (("authorization", f"Basic {auth}"),), show_code=show)} if key and auth else {}
 
 
 def source_for(ecosystem: str, registry: str | None, known: dict[str, Source]) -> Source | None:

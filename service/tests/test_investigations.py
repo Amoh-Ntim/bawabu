@@ -162,6 +162,10 @@ def test_pipeline_runs_diff_sandbox_and_spark_then_stores_and_caches():
 
     inv_id, result = asyncio.run(go())
     assert result["verdict"] == "block" and store.rows[inv_id]["status"] == "done"
+    # What the report page needs: the cited code with context, the first sandbox run and the diff summary.
+    assert result["snippets"]["setup.js:3"]["start"] == 1 and "readFileSync" in result["snippets"]["setup.js:3"]["lines"][2]
+    assert result["sandbox"]["summary"] == LEAKY_RUN["summary"]
+    assert result["diff"]["risk"] == "high" and result["diff"]["previous"] is None
     assert sandbox_calls == [("env-loader-plus", "1.0.0", LAB, "bGFiOnB3", None, None)]  # the login reaches the sandbox's npm
     events = asyncio.run(store.events(inv_id))
     assert [e["seq"] for e in events] == list(range(len(events)))  # written in order

@@ -7,6 +7,9 @@ Two functions:
   * `investigate`: the deep check for a suspicious package (diff + sandbox + Muse Spark). /check starts it with
     .spawn() and waits for its verdict; it keeps running if /check gives up waiting, so a retry finds the result.
 
+The live feed (/investigations, which the /live page follows) is turned on for this deployment, because only our
+own test lab feeds it. It lists package names from every client, so leave it off on a shared service.
+
 Secrets (created by hand, never in the repo):
   * `bawabu-supabase`: SUPABASE_URL, SUPABASE_SECRET_KEY (verdict cache, investigations, events).
   * `bawabu-investigator`: META_API_KEY (Muse Spark), LAB_REGISTRY_URL + LAB_REGISTRY_AUTH (the test lab's
@@ -65,7 +68,11 @@ async def investigate(inv_id: str, payload: dict) -> dict:
                                         effort=SPARK_EFFORT)
 
 
-@app.function(secrets=secrets, timeout=180, scaledown_window=300)
+# Config, not secrets: the live feed, and code in reports for the test lab (our own harmless fixtures).
+DEMO_SETTINGS = {"BAWABU_PUBLIC_FEED": "1", "LAB_REGISTRY_SHOW_CODE": "1"}
+
+
+@app.function(secrets=[*secrets, modal.Secret.from_dict(DEMO_SETTINGS)], timeout=180, scaledown_window=300)
 @modal.concurrent(max_inputs=100)
 @modal.asgi_app(label="bawabu")
 def web():

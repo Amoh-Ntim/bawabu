@@ -432,6 +432,8 @@ def _summary(name: str, args: dict) -> str:
     if name == "search_code":
         return f"Searching the code for {args.get('pattern')!r}"
     if name == "decode":
+        if args.get("file") and args.get("line"):
+            return f"Decoding the {args.get('format')} string on {args['file']}:{args['line']}"
         return f"Decoding a {args.get('format')} string ({len(str(args.get('text', '')))} chars)"
     if name == "get_diff":
         return f"Diffing {args['file']} against the previous version" if args.get("file") else "Checking what changed since the previous version"
