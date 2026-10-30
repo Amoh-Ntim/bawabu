@@ -11,6 +11,7 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Baseten open weights (`muse-spark-open-1026`): chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 4 checks pass, faster than the Meta API. See below |
 | Modal credits | 🟡 Approved | Oct 28: approved, credits being processed |
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
+| **Step 5: sandbox X-ray** (locked Modal sandbox, canaries, strace, fake-internet sink, evidence) | ✅ **Done** | Oct 30. Token-stealer caught (canary POST intercepted over HTTPS); transitive-dep, CI-gated and date-gated variants caught; 3 legit packages not flagged. Trigger-aware re-runs (env + faketime) also working |
 | **Step 1: CLI and hook** (`bawabu init`, `bawabu check`) | ✅ **Done** | Oct 29. A real Muse agent's `npm install left-pad` was blocked, and allowed once allowlisted |
 | **Coverage: bun, pipx, script files, package.json scripts, MCP servers** | ✅ **Done** | Oct 29. 39 unit tests pass. Real agents blocked on `./setup.sh`, `bun run setup` and `pipx install`. MCP edits blocked at the hook |
 | **Step 4: test lab** (harmless practice packages on a private registry) | ✅ **Done** | Oct 29. 11 practice packages (12 versions) on a password-locked Verdaccio on Modal, which passes everything else through to the real npm. All install; no password means `E401` |
@@ -19,8 +20,90 @@ A running record of what we tested, what we found, and how it changes the build.
 | Muse Code installed and signed in | ✅ Done | v1.4.13, at `~/.local/bin/muse` |
 | **Muse Code hook can block and message the agent** | ✅ **Proven** | Oct 27. See below |
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
-| One Modal sandbox command | ⏳ Waiting | Needs a Modal account and credits |
+| One Modal sandbox command | ✅ **Proven** | Oct 28 (smoke) and Oct 30 (full X-ray runs) |
 | Public GitHub repo | ✅ Done | `Amoh-Ntim/bawabu`, created after kickoff |
+
+---
+
+## 2026-10-30 (Fri): Step 5 — the sandbox X-ray
+
+### Result
+
+The X-ray works end to end. A package is run in a **network-blocked Modal sandbox** with planted
+canary secrets and `strace`, and everything it tries to send is captured by a fake-internet sink —
+so a token-stealer is caught **leaking a canary**, which is the one conclusive signal.
+
+Measured on the test lab (each run ≈ 30–60 s; `uv run sandbox/scripts/run_sandbox.py <name> <ver>`):
+
+| Fixture | Expected | Sandbox verdict signal | Right? |
+|---|---|---|---|
+| env-loader-plus | block | **Exfiltration confirmed**: npm-token canary → `collector.bawabu-test.invalid` (HTTPS POST intercepted, base64 body decoded) | ✅ |
+| console-logs-transport | block | Exfiltration confirmed (canary leaked) | ✅ |
+| markdown-tiny-render | block | Exfiltration confirmed — via its **transitive** dep console-logs-transport (`npm rebuild` ran the dep's install script) | ✅ |
+| color-hex-convert | block | Exfiltration confirmed (quiet payload fired) | ✅ |
+| ci-build-cache-helper (no CI) | allow (dormant) | No secret reads or unknown contact | ✅ |
+| ci-build-cache-helper `--ci` | block | Exfiltration confirmed — fires only with `CI=true` | ✅ |
+| date-fns-lite-utils `--date 2027-02-01` | block | Exfiltration confirmed — time-bomb fired under a faked clock | ✅ |
+| fastbundle-bin (esbuild-style) | allow | No unknown contact (its registry fetch is known-good) | ✅ |
+| image-resize-native (native build) | allow | No secret reads or unknown contact | ✅ |
+| pretty-log-kit (heavy postinstall) | allow | No secret reads or unknown contact | ✅ |
+| string-format-pro-utils (base64 blob) | block | **Sandbox sees nothing** — by design: the blob can't run (`require` isn't in `new Function` scope). Caught later by the diff engine + Spark decode (Steps 6–7) | ✅ (funnel) |
+
+**Step 5 "done when" met:** the token-stealer stand-in is caught in the evidence report. Trigger-aware
+re-runs (Step 8's core) already work too — CI-gated and date-gated payloads are revealed.
+
+### How it works (`sandbox/bawabu_sandbox/`)
+
+Two phases, because a network-blocked sandbox can't download anything:
+1. **Stage** (network on): `npm install <pkg> --ignore-scripts` into a throwaway sandbox so **none**
+   of the package's code runs — only files are fetched. `snapshot_filesystem()` captures the result.
+2. **Trigger** (network blocked): boot a fresh sandbox from the snapshot, plant canary secrets, start
+   the sink, then run the code under `strace` (`npm rebuild` for install scripts; `require()` for
+   load-time code). Collect strace + the sink log → evidence.
+
+Pieces:
+- **`honeypots.py`** — the bait: fake `~/.npmrc`, `~/.ssh/id_rsa`, `~/.aws/credentials`, project `.env`,
+  each holding a **distinct** canary, plus `NPM_TOKEN`/`GITHUB_TOKEN` env canaries and a lived-in home.
+- **`sink.py`** — the fake internet, inside the sandbox: a DNS server that resolves everything to
+  loopback, and HTTP/HTTPS catch-all servers that log every request. HTTPS is terminated with a CA
+  generated at startup that **mints a leaf cert per SNI hostname**, so the package's `fetch("https://…")`
+  completes and we capture the plaintext body (even base64-encoded secrets). Verified on the laptop
+  (`test_sink.py`): a real DNS query + HTTPS POST through the minted CA is captured.
+- **`dnsshim.c`** — a tiny `LD_PRELOAD` shim overriding `getaddrinfo` so every hostname resolves to
+  loopback **and** the intended destination is logged. Needed because Modal manages `/etc/resolv.conf`
+  and reverts edits, so DNS can't be repointed the normal way. Coexists with libfaketime (combined
+  `LD_PRELOAD`) for the time-bomb case.
+- **`strace_parse.py`** / **`evidence.py`** — pure, unit-tested: strace → files opened / processes /
+  connections; then a report with secret reads, network attempts, leaked canaries, notes. **A leaked
+  canary is always guilt; a network call alone is not** (legit installers fetch binaries).
+
+### Things that bit us (and the fixes)
+
+- **`/etc/resolv.conf` is managed by Modal** and reverts writes → DNS couldn't be repointed → every
+  lookup failed with `EAI_AGAIN` before reaching the sink. Fixed with the `LD_PRELOAD` resolver shim.
+- **npm reads `~/.npmrc` itself**, so an `.npmrc` *read* is not a signal — only the **leaked canary** is.
+  The evidence builder ignores `.npmrc` reads; `.ssh`/`.aws`/`.env` reads still count.
+- **The install registry is a benign destination** (esbuild-style downloaders fetch their own binary),
+  so the runner passes the registry host to the evidence builder as known-good. Stops a false positive
+  on fastbundle-bin.
+- **Verdaccio cold-start `ENOVERSIONS`**: a cold registry can answer `/-/ping` before its storage is
+  ready, returning an empty packument that npm caches. The runner now **warms the registry from inside
+  the staging container** (curl until versions appear) before npm runs.
+- **zsh doesn't word-split unquoted `$var`** (unlike bash). A batch test harness passed `"name 1.0.0"`
+  as one argument, so npm tried to install a package literally named `1.0.0` (`ENOVERSIONS`). The runner
+  was fine; the harness wasn't. (Already in memory: Bash here is zsh — use arrays / `${=var}`.)
+
+### Tests
+
+`sandbox/tests/` — 11 unit tests (strace parsing, evidence rules, and a live localhost sink test that
+drives a real DNS query + HTTPS POST through the minted CA). `cryptography` added to dev deps; pytest
+now also covers `sandbox/tests`.
+
+### Still to wire
+
+- Step 6 (diff engine) and Step 7 (Spark investigator) will use this evidence. The sandbox isn't in the
+  **service** decision path yet — `run_sandbox.py` runs it by hand. Step 7 connects it.
+- `string-format-pro-utils` needs the diff/decode path (its blob can't execute in the sandbox).
 
 ---
 

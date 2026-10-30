@@ -30,7 +30,12 @@ data = modal.Volume.from_name("bawabu-verdaccio-data", create_if_missing=True)
     volumes={"/data": data},
     secrets=[modal.Secret.from_name("bawabu-verdaccio", required_keys=["VERDACCIO_HTPASSWD"])],
     timeout=3600,
-    scaledown_window=300,
+    # A cold Verdaccio can answer /-/ping before its storage is ready, so the first packument hit
+    # returns an empty set that npm caches as ENOVERSIONS. The sandbox runner guards against this by
+    # warming the registry from inside the staging container before npm runs (see runner._stage);
+    # a longer scaledown window also keeps it warm between calls during a session. Set
+    # min_containers=1 for a demo if you want to remove the cold-start race entirely.
+    scaledown_window=600,
     min_containers=0,
 )
 @modal.concurrent(max_inputs=50)

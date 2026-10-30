@@ -19,8 +19,11 @@ package = false
 dev = [
     "pytest>=8",
     "uvicorn>=0.30",
+    # Used by the sandbox sink (runs inside the Modal image, where it is pip-installed); needed
+    # locally to test the sink and evidence pipeline.
+    "cryptography>=43",
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["service"]
-testpaths = ["service/tests"]
+pythonpath = ["service", "sandbox"]
+testpaths = ["service/tests", "sandbox/tests"]
