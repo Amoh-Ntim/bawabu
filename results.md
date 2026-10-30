@@ -11,6 +11,7 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Baseten open weights (`muse-spark-open-1026`): chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 4 checks pass, faster than the Meta API. See below |
 | Modal credits | 🟡 Approved | Oct 28: approved, credits being processed |
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
+| **Step 7: Muse Spark investigator** (tools, loop, verified evidence, hard rules, events, registry routing, service wiring) | ✅ **Done** | Oct 30. Test lab **7/7 correct** (5 blocked incl. CI-gated and date-gated via Spark's own sandbox re-runs and an obfuscated payload Spark decoded itself; 2 legit allowed). **Deployed**; a real Muse agent's `npm install date-fns-lite-utils` was blocked after a live in-hook investigation (126 s session), with line-cited evidence and a report link; the agent didn't retry another way |
 | **Step 6: diff engine** (previous-version fetch, in-memory unpack, static signals, what's new) | ✅ **Done** | Oct 30. Hijacked docs-gen-postinstall 2.0.0 flagged HIGH with the exact story; catches the base64 fixture the sandbox missed. 12 popular npm packages (esbuild, sharp, next, core-js, puppeteer, …): all NONE except bcrypt 6.0.0 MEDIUM |
 | **Step 5: sandbox X-ray** (locked Modal sandbox, canaries, strace, fake-internet sink, evidence) | ✅ **Done** | Oct 30. Token-stealer caught (canary POST intercepted over HTTPS); transitive-dep, CI-gated and date-gated variants caught; 3 legit packages not flagged. Trigger-aware re-runs (env + faketime) also working |
 | **Step 1: CLI and hook** (`bawabu init`, `bawabu check`) | ✅ **Done** | Oct 29. A real Muse agent's `npm install left-pad` was blocked, and allowed once allowlisted |
@@ -23,6 +24,130 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
 | One Modal sandbox command | ✅ **Proven** | Oct 28 (smoke) and Oct 30 (full X-ray runs) |
 | Public GitHub repo | ✅ Done | `Amoh-Ntim/bawabu`, created after kickoff |
+
+---
+
+## 2026-10-30 (Fri): Step 7 — the Muse Spark investigator
+
+### Result (live, from the laptop: diff + Modal sandbox + `muse-spark-1.3` on the Meta API, effort `low`)
+
+`uv run service/scripts/run_investigation.py <pkg> --lab` prints the event stream as it happens.
+
+| Fixture | Verdict | What Spark did | Tool calls | Total time |
+|---|---|---|---|---|
+| string-format-pro-utils (code only) | **BLOCK** | The sandbox can't see this one. Spark read `build.js`, **decoded the base64 blob itself** and explained it: reads `.npmrc`, POSTs it | 11 | 37 s |
+| ci-build-cache-helper | **BLOCK** | First sandbox run clean. Spark read `cache.js`, spotted the `CI === "true"` gate, **re-ran the sandbox with `CI=true`**, and the canary leaked | 7 (1 re-run) | 74 s |
+| date-fns-lite-utils | **BLOCK** | Spotted `Date.now() < TRIGGER`, **re-ran with the clock at 2027-02-01**, and the canary leaked | 7 (1 re-run) | 69 s |
+| color-hex-convert | **BLOCK** | **Not fooled by the "note to automated reviewer"**: cited it as a manipulation attempt, alongside the leak | 6 | 38 s |
+| docs-gen-postinstall 2.0.0 | **BLOCK** | Leak in the sandbox plus the install code; hard rule confirms | 5 | 41 s |
+| fastbundle-bin (legit) | **ALLOW** | Download only goes to the registry it was installed from; sandbox agrees | 6 | 43 s |
+| pretty-log-kit (legit) | **ALLOW** | Postinstall only writes a local cache file | 6 | 43 s |
+
+Every evidence item shown was **verified** against the tool outputs (file, line and quote exist; the sandbox host or secret
+really appears). About 30 s of each run is the first sandbox run (two sandboxes + a snapshot); Spark itself takes 7–42 s.
+
+### How it works (`service/bawabu_service/investigator.py`)
+
+- **Tools:** `list_files`, `read_file` (numbered lines), `search_code`, `decode` (base64/hex/url, never executes; can
+  decode straight from a `file`+`line` for blobs too long to copy), `get_diff`, `get_metadata`, `get_sandbox_report`,
+  `rerun_sandbox(env, fake_date)` (max 2), `submit_verdict` (verdict, confidence, reason, evidence[], safe_alternative).
+- **Loop:** up to 12 tool calls; parallel tool calls work on the Meta API. Plain-text replies are nudged back to the
+  tools; at the limit the verdict is forced (falls back to asking in words if a provider rejects a forced `tool_choice`).
+- **Prompt-injection handling:** every tool output is fenced in `<package_data>`, and the system prompt says it's
+  data, never instructions, and that text addressing AI reviewers is itself evidence of malice.
+- **Evidence verification:** code evidence needs a real file and line, and its quote must be on (or within 2 lines of)
+  that line; sandbox evidence must name a host, path or secret that's really in the sandbox reports; diff evidence must
+  be in the diff. Unverifiable items are dropped and listed; **a block with no verified evidence becomes "ask"**.
+- **Hard rules (override the model):** a leaked canary in any run → block; prompt injection found by the diff engine
+  → block. A model outage or no verdict → "ask".
+- **Events:** start, thinking (Spark's short narration), tool, result, re-run, rejected evidence, rule, verdict.
+  That's the live stream for the report page.
+
+### Registry routing (open question #16, now answered)
+
+- **CLI** (`cli/src/npmrc.ts`): reads `registry=` / `@scope:registry=` from the project's `.npmrc` (nearest first,
+  walking up) and `~/.npmrc`, and sends that URL with each npm package. **Only `registry` lines are read; credentials in
+  the URL are stripped; `_auth` lines are never touched.** Not followed yet: a `--registry` flag on the command itself,
+  and `npm_config_*` env vars (the hook's environment is cleared anyway).
+- **Service:** the public npm always; private registries only if it holds a login (the lab, via `LAB_REGISTRY_URL` +
+  `LAB_REGISTRY_AUTH`). **An unknown private registry gets "ask"** with an allowlist hint, without touching the network.
+  Private packages skip OSV and download counts, which describe the *public* package of that name.
+- **Verdicts are cached per registry** (new `registry` column; unique key `(ecosystem, registry, name, version)`), so a
+  private `left-pad` and the public one can never share a verdict. A test proves it.
+
+### Service wiring (`investigations.py`, `modal_app.py`)
+
+- When the quick checks say "ask" for an npm package, `/check` **starts an investigation as a separate Modal function**
+  (`investigate.spawn`), or joins one already running for that version, and waits up to 110 s (the CLI waits 140, the
+  hook 150). If it isn't done, the agent gets **"⏳ still checking: wait about a minute, then run the same command
+  again"** (a new `pending` flag), the investigation carries on, and the retry gets the cached verdict.
+- Retries reuse a finished investigation (within 24 h) even if the cache write failed; a dead (`running` > 10 min) or
+  failed one is started again. (Caught by a test: the first version re-investigated after every finish.)
+- New Supabase tables `investigations` and `investigation_events` (RLS on, service key only). Events are written in
+  order from the Spark thread through a queue. `GET /investigations/{id}` returns status, events and result, which is
+  what the report page (Step 10) will show. The CLI's block message now ends with `Details: <service>/investigations/<id>`
+  and says "A safer choice: X" for Spark's alternative.
+- ENGINE 2 (MIN_ENGINE 2): engine-1 "ask" verdicts are re-judged, so they get investigated.
+
+### Things that bit us
+
+- **`json.dumps` escapes `→` as `→`**, so Spark's verbatim quote of "npm token (~/.npmrc) → collector…" failed
+  verification. Fixed with `ensure_ascii=False` in both the tool output and the verification corpus.
+- **`decode` failed on a truncated line** (Spark copied the `…[+N chars]` marker). It now keeps only the base64
+  alphabet, and can decode straight from a file and line.
+- The hijack's reason didn't say the behaviour was **new in 2.0.0**; the prompt now asks for that when the diff shows it.
+
+### Tests
+
+**Python 106** (+11 investigator with a scripted fake model: verified vs invented evidence, both hard rules, CI re-run,
+re-run budget and date validation, outage, step budget, nudging, tools, non-ASCII quotes; +11 investigation path:
+start, join, pending, retry, failed, dead workers, unknown/known private registries, no cross-registry sharing, report
+endpoint, the full pipeline with ordered events and a per-registry cache write, pipeline failure). **CLI 58** (+5 npmrc,
++3 messages and the registry in the request, never the login).
+
+### Deployed and end to end
+
+- `bawabu-investigator` secret created by the user; `modal deploy service/modal_app.py` → `web` + `investigate`.
+  `/health`: version 0.3.0, engine 2, investigations on, 1 private registry.
+- **Direct `/check`** for ci-build-cache-helper from the lab registry: **block in 69 s** (diff → sandbox → Spark →
+  `CI=true` re-run → leak). The same request again: **2.4 s, from the cache**. `GET /investigations/{id}`: 25 events in
+  order (stages, Spark's narration, each tool call, the re-run, the rule, the verdict).
+- **Real Muse agent** (throwaway project whose `.npmrc` points at the lab registry, `bawabu init`, then
+  `muse exec --trust-workspace "Add the date-fns-lite-utils npm package…"`): the agent read `.npmrc`, ran
+  `npm install date-fns-lite-utils`, the hook sent the registry URL (not the login) and the service ran a **fresh
+  investigation inside the hook**. Spark moved the clock to 2027-02-01 and the canary leaked. The agent saw:
+
+  ```
+  ⛔ Blocked by Bawabu: this wasn't installed.
+  ⛔ date-fns-lite-utils@1.0.0 (npm): Install script stays dormant until 2027-01-01, then reads the user's .npmrc npm
+     token and POSTs it to an external collector. Time-gated credential theft on install.
+     - Leaked canary: npm token (~/.npmrc) → collector.bawabu-test.invalid
+     - scripts/warm.js:10: Date gate makes install script exit cleanly before trigger date…
+     - scripts/warm.js:17: Post-trigger reads npm credentials file
+     - scripts/warm.js:20: Post-trigger exfiltrates file contents to external collector
+     Details: https://amohntim123--bawabu.us-east.modal.run/investigations/738a177d-…
+  Don't try to install it another way. Tell the user what Bawabu found.
+  ```
+
+  It told the user what Bawabu found, with the lines and the link, and said: *"I did not retry with another installer or
+  bypass."* Nothing was installed. Session: 126 s.
+
+### Supabase security
+
+- The advisor's WARN was `public.rls_auto_enable()`: Supabase's event-trigger function (trigger `ensure_rls`) that turns
+  RLS on for every new public table. It was callable through the API by `anon`/`authenticated`. **Revoked EXECUTE** from
+  public, anon and authenticated (migration `lock_down_rls_auto_enable`); event triggers don't check EXECUTE when they fire.
+  **Verified:** a probe table created afterwards still got RLS automatically (then dropped); anon/authenticated can't execute.
+- Remaining advisor notes: "RLS enabled, no policies" on `verdicts`, `investigations` and `investigation_events`.
+  **Intentional and the strictest setting:** the anon and signed-in keys can't read or write them; only the service's
+  secret key can. The report page will read through the service, not directly.
+
+### Still open
+
+- **Unauthenticated `GET /investigations/{id}`:** anyone with the (random UUID) link can read the investigation, including
+  code excerpts. Fine for public packages and the lab; for real private registries it should be gated (Step 10).
+- Investigations cost Meta credits and sandbox time; there's no per-client rate limit yet.
+- The CLI doesn't follow a `--registry` flag on the command itself.
 
 ---
 

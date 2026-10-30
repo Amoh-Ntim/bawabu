@@ -29,7 +29,8 @@ def npm(name: str, version: str = "") -> dict:
 
 def test_health():
     c, _, _ = service()
-    assert c.get("/health").json() == {"ok": True, "version": "0.2.0", "engine": verdicts.ENGINE, "cache": "memory"}
+    assert c.get("/health").json() == {"ok": True, "version": "0.3.0", "engine": verdicts.ENGINE, "cache": "memory",
+                                       "investigations": False, "private_registries": 0}
 
 
 def test_react_is_allowed_with_its_resolved_version_and_then_cached():
@@ -165,13 +166,23 @@ def test_supabase_cache_requests():
     assert hit == CachedVerdict("ask", "r", 3, ("new",), "react")
     assert get.url.path == "/rest/v1/verdicts"
     assert dict(get.url.params) == {
-        "select": "verdict,reason,engine,signals,suggestion", "ecosystem": "eq.npm", "name": "eq.@scope/pkg",
+        "select": "verdict,reason,engine,signals,suggestion", "ecosystem": "eq.npm", "registry": "eq.", "name": "eq.@scope/pkg",
         "version": "eq.1.0.0", "engine": "gte.2", "expires_at": f"gt.{NOW.isoformat()}", "limit": "1",
     }
     assert get.headers["apikey"] == "sb_secret_abc" and "authorization" not in get.headers
-    assert post.url.params["on_conflict"] == "ecosystem,name,version"
+    assert post.url.params["on_conflict"] == "ecosystem,registry,name,version"
     assert "resolution=merge-duplicates" in post.headers["prefer"]
     assert json.loads(post.content) == {
-        "ecosystem": "npm", "name": "@scope/pkg", "version": "1.0.0", "verdict": "allow", "reason": "ok", "engine": 2,
+        "ecosystem": "npm", "registry": "", "name": "@scope/pkg", "version": "1.0.0", "verdict": "allow", "reason": "ok", "engine": 2,
         "signals": ["a"], "suggestion": None, "expires_at": (NOW + timedelta(seconds=3600)).isoformat(),
     }
+    # A private registry's verdicts are filed under its URL, apart from the public package of the same name.
+    asyncio.run(cache.get("npm", "@scope/pkg", "1.0.0", 2, registry="https://lab.example"))
+    assert seen[-1].url.params["registry"] == "eq.https://lab.example"
+
+
+def test_memory_cache_keeps_registries_apart():
+    cache = MemoryCache()
+    asyncio.run(cache.put("npm", "foo", "1.0.0", CachedVerdict("block", "private foo is bad", 2), 3600, registry="https://lab.example"))
+    assert asyncio.run(cache.get("npm", "foo", "1.0.0", 2)) is None
+    assert asyncio.run(cache.get("npm", "foo", "1.0.0", 2, registry="https://lab.example")).verdict == "block"

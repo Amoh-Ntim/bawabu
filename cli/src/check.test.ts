@@ -209,6 +209,34 @@ test("an ask from the service stops and tells the agent to ask the user", async 
   assert.match(d.message!, /brand new, few downloads/);
 });
 
+test("an investigated block shows its evidence, a safer choice and the report link", async () => {
+  const blocked = { ...result("env-loader-plus", "block", "Reads your npm token on install and sends it away."),
+    signals: ["scripts/setup.js:12: reads ~/.npmrc"], suggestion: "dotenv", report_id: "abc-123" };
+  const d = await decide(bash("npm install env-loader-plus"), withService(), service(answer("block", [blocked])).env);
+  assert.equal(d.exitCode, 2);
+  assert.match(d.message!, /- scripts\/setup\.js:12: reads ~\/\.npmrc/);
+  assert.match(d.message!, /A safer choice: dotenv\./);
+  assert.doesNotMatch(d.message!, /Did you mean/);
+  assert.match(d.message!, /Details: https:\/\/bawabu\.example\/investigations\/abc-123/);
+});
+
+test("a still-running investigation tells the agent to wait and retry, not to ask the user", async () => {
+  const pending = { ...result("ci-build-cache-helper", "ask", "Bawabu is still investigating it."), pending: true, report_id: "r1" };
+  const d = await decide(bash("npm install ci-build-cache-helper"), withService(), service(answer("ask", [pending])).env);
+  assert.equal(d.exitCode, 2);
+  assert.match(d.message!, /still checking/);
+  assert.match(d.message!, /run exactly the same command again/);
+  assert.doesNotMatch(d.message!, /needs the user's OK/);
+});
+
+test("the project's registry from .npmrc is sent, never its login", async () => {
+  const files = { "/tmp/project/.npmrc": "registry=https://lab.example/\n//lab.example/:_auth=c2VjcmV0\n" };
+  const s = service(answer("allow", [result("x", "allow")]));
+  await decide(bash("npm install x"), withService(), { ...s.env, ...env(files), post: s.env.post });
+  assert.deepEqual(s.calls[0].body.packages, [{ ecosystem: "npm", name: "x", version: "", registry: "https://lab.example" }]);
+  assert.doesNotMatch(JSON.stringify(s.calls[0].body), /c2VjcmV0|_auth/);
+});
+
 test("service failures block", async () => {
   const down = await decide(bash("npm install x"), withService(), service(new Error("couldn't connect to bawabu.example")).env);
   assert.equal(down.exitCode, 2);

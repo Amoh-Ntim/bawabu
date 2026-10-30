@@ -17,9 +17,13 @@ export interface PackageResult {
   reason: string;
   /** The red flags behind an ask or block, one sentence each. */
   signals?: string[];
-  /** A real package the agent probably meant. */
+  /** A real package the agent probably meant, or (after an investigation) a safer alternative. */
   suggestion?: string | null;
   cached: boolean;
+  /** The investigation behind the verdict: <service>/investigations/<id>. */
+  report_id?: string | null;
+  /** The investigation is still running: wait and retry. */
+  pending?: boolean;
 }
 
 export interface ManifestResult {
@@ -41,10 +45,12 @@ export type Post = (url: string, body: unknown, timeoutMs: number) => Promise<un
 const PYPI_MANAGERS = new Set(["pip", "uv", "uvx", "pipx"]);
 const VERDICTS = new Set(["allow", "block", "ask"]);
 
-export function checkRequest(installs: Install[]) {
-  const packages = new Map<string, { ecosystem: string; name: string; version: string }>();
+/** `registryFor` names the registry an npm package comes from (null: the public npm); only its URL is sent. */
+export function checkRequest(installs: Install[], registryFor: (name: string) => string | null = () => null) {
+  const packages = new Map<string, { ecosystem: string; name: string; version: string; registry?: string }>();
   for (const p of installs.flatMap((i) => i.packages)) {
-    packages.set(`${p.ecosystem}:${p.name}@${p.version}`, { ecosystem: p.ecosystem, name: p.name, version: p.version });
+    const registry = p.ecosystem === "npm" ? registryFor(p.name) : null;
+    packages.set(`${p.ecosystem}:${p.name}@${p.version}`, { ecosystem: p.ecosystem, name: p.name, version: p.version, ...(registry ? { registry } : {}) });
   }
   return {
     client_version: VERSION,

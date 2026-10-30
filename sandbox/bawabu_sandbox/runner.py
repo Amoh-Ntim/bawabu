@@ -52,6 +52,24 @@ class SandboxRun:
     def ok(self) -> bool:
         return self.error is None
 
+    def report(self) -> dict:
+        """What the investigator sees: the evidence plus the scripts and their output."""
+        if self.error:
+            return {"summary": f"The sandbox run failed: {self.error}", "error": self.error}
+        ev = self.evidence
+        return {
+            "summary": ev.summary(),
+            "install_scripts": self.install_scripts,
+            "secret_reads": ev.secret_reads,
+            "network": [n.__dict__ for n in ev.network],
+            "dns_queries": ev.dns_queries,
+            "processes": ev.processes,
+            "canaries_leaked": ev.canaries_leaked,
+            "notes": ev.notes,
+            "output": self.trigger_output[-2000:],
+            "duration_s": ev.duration_s,
+        }
+
 
 RESOLVE_LOG = "/var/log/bawabu-resolve.log"
 SHIM_PATH = "/opt/bawabu/dnsshim.so"

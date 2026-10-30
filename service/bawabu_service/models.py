@@ -16,6 +16,8 @@ class Package(BaseModel):
     name: str = Field(min_length=1, max_length=214)
     # Requested version, range or tag; "" means whatever is latest.
     version: str = Field(default="", max_length=256)
+    # The registry the project installs from (npm only), as the CLI read it from .npmrc; absent = the public npm.
+    registry: str | None = Field(default=None, max_length=512)
 
 
 class Manifest(BaseModel):
@@ -41,9 +43,13 @@ class PackageResult(BaseModel):
     reason: str
     # The red flags behind an "ask" or "block", one sentence each.
     signals: list[str] = Field(default_factory=list)
-    # A real package the agent probably meant (for made-up or lookalike names).
+    # A real package the agent probably meant (for made-up or lookalike names), or a safe alternative.
     suggestion: str | None = None
     cached: bool
+    # The investigation behind this verdict, for the report page (GET /investigations/{id}).
+    report_id: str | None = None
+    # True when the investigation is still running: the agent should wait a minute and retry.
+    pending: bool = False
 
 
 class ManifestResult(BaseModel):

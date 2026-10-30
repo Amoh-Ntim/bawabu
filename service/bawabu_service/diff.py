@@ -29,6 +29,7 @@ import httpx
 import semantic_version
 
 from . import registry
+from .registry import Source
 
 MAX_TARBALL = 64 * 1024 * 1024  # next is ~30 MB
 MAX_FILES = 20_000
@@ -39,14 +40,6 @@ MAX_DIFF_LINES = 400
 TEXT_EXTENSIONS = (".js", ".cjs", ".mjs", ".ts", ".cts", ".mts", ".jsx", ".tsx", ".json", ".sh", ".py", ".gyp", ".yml", ".yaml", ".md", "")
 
 SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3}
-
-
-@dataclass(frozen=True)
-class Source:
-    """Where to fetch packages from. The public npm by default; the test lab passes its URL and login."""
-
-    url: str = registry.NPM
-    headers: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -80,6 +73,8 @@ class DiffReport:
     signals: list[Signal] = field(default_factory=list)
     diffs: dict[str, str] = field(default_factory=dict)  # file -> unified diff against the previous version
     notes: list[str] = field(default_factory=list)
+    # The new version's files, for the investigator's read_file/search_code tools.
+    contents: dict[str, bytes] = field(default_factory=dict, repr=False)
 
     @property
     def risk(self) -> str:
@@ -265,7 +260,7 @@ def compare(name: str, version: str, new: dict[str, bytes], previous: str | None
             provenance: bool | None = None, previous_provenance: bool | None = None) -> DiffReport:
     """Signals for `new`, each marked new or not by comparing with `old` (the previous version), plus the
     package-level changes: install scripts, the files they run, dependencies, provenance."""
-    report = DiffReport(name, version, previous, files=sorted(new))
+    report = DiffReport(name, version, previous, files=sorted(new), contents=new)
     new_manifest, old_manifest = _manifest(new), _manifest(old or {})
     new_install = _install_files(new_manifest, new)
 

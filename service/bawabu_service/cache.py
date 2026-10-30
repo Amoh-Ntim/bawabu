@@ -32,9 +32,10 @@ def _now() -> datetime:
 class Cache(Protocol):
     name: str
 
-    async def get(self, ecosystem: str, package: str, version: str, min_engine: int) -> CachedVerdict | None: ...
+    # `registry` is "" for the public registry, else the private registry's URL: verdicts never cross registries.
+    async def get(self, ecosystem: str, package: str, version: str, min_engine: int, registry: str = "") -> CachedVerdict | None: ...
 
-    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict, ttl_seconds: int) -> None: ...
+    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict, ttl_seconds: int, registry: str = "") -> None: ...
 
 
 class MemoryCache:
@@ -43,17 +44,21 @@ class MemoryCache:
     name = "memory"
 
     def __init__(self, clock=_now) -> None:
-        self._items: dict[tuple[str, str, str], tuple[CachedVerdict, datetime]] = {}
+        self._items: dict[tuple[str, ...], tuple[CachedVerdict, datetime]] = {}
         self._clock = clock
 
-    async def get(self, ecosystem: str, package: str, version: str, min_engine: int) -> CachedVerdict | None:
-        hit = self._items.get((ecosystem, package, version))
+    @staticmethod
+    def _key(ecosystem: str, package: str, version: str, registry: str) -> tuple[str, ...]:
+        return (ecosystem, package, version) if not registry else (ecosystem, registry, package, version)
+
+    async def get(self, ecosystem: str, package: str, version: str, min_engine: int, registry: str = "") -> CachedVerdict | None:
+        hit = self._items.get(self._key(ecosystem, package, version, registry))
         if hit and hit[0].engine >= min_engine and hit[1] > self._clock():
             return hit[0]
         return None
 
-    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict, ttl_seconds: int) -> None:
-        self._items[(ecosystem, package, version)] = (verdict, self._clock() + timedelta(seconds=ttl_seconds))
+    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict, ttl_seconds: int, registry: str = "") -> None:
+        self._items[self._key(ecosystem, package, version, registry)] = (verdict, self._clock() + timedelta(seconds=ttl_seconds))
 
 
 class SupabaseCache:
@@ -68,10 +73,11 @@ class SupabaseCache:
         self._client = client or httpx.AsyncClient(timeout=10)
         self._clock = clock
 
-    async def get(self, ecosystem: str, package: str, version: str, min_engine: int) -> CachedVerdict | None:
+    async def get(self, ecosystem: str, package: str, version: str, min_engine: int, registry: str = "") -> CachedVerdict | None:
         params = {
             "select": "verdict,reason,engine,signals,suggestion",
             "ecosystem": f"eq.{ecosystem}",
+            "registry": f"eq.{registry}",
             "name": f"eq.{package}",
             "version": f"eq.{version}",
             "engine": f"gte.{min_engine}",
@@ -86,13 +92,14 @@ class SupabaseCache:
         row = rows[0]
         return CachedVerdict(row["verdict"], row["reason"], row["engine"], tuple(row.get("signals") or ()), row.get("suggestion"))
 
-    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict, ttl_seconds: int) -> None:
+    async def put(self, ecosystem: str, package: str, version: str, verdict: CachedVerdict, ttl_seconds: int, registry: str = "") -> None:
         response = await self._client.post(
             self._table,
             headers={**self._headers, "Prefer": "resolution=merge-duplicates,return=minimal"},
-            params={"on_conflict": "ecosystem,name,version"},
+            params={"on_conflict": "ecosystem,registry,name,version"},
             json={
                 "ecosystem": ecosystem,
+                "registry": registry,
                 "name": package,
                 "version": version,
                 "verdict": verdict.verdict,

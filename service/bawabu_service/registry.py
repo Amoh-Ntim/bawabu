@@ -2,6 +2,7 @@
 the quick checks use (age, publish time, install-time code, provenance, publisher).
 """
 
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -63,8 +64,51 @@ class RegistryError(Exception):
     pass
 
 
-async def lookup(client: httpx.AsyncClient, ecosystem: str, name: str, requested: str) -> Lookup:
-    return await (npm_lookup if ecosystem == "npm" else pypi_lookup)(client, name, requested)
+@dataclass(frozen=True)
+class Source:
+    """Where npm packages come from: the public npm by default, or a private registry the service has a login for."""
+
+    url: str = NPM
+    headers: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def public(self) -> bool:
+        return self.url.rstrip("/") == NPM
+
+    @property
+    def key(self) -> str:
+        """How verdicts for this registry are kept apart from the public npm's: "" for the public npm."""
+        return "" if self.public else self.url.rstrip("/")
+
+
+def clean_url(value: str) -> str | None:
+    """scheme://host/path with credentials, query and trailing slash dropped (as the CLI does); None if not http(s)."""
+    match = re.match(r"(https?)://(?:[^@/]*@)?([^/?#]+)([^?#]*)", value.strip())
+    return f"{match.group(1)}://{match.group(2).lower()}{match.group(3)}".rstrip("/") if match else None
+
+
+def sources_from_env() -> dict[str, Source]:
+    """Private registries the service can read, by URL: the test lab's Verdaccio when LAB_REGISTRY_URL and
+    LAB_REGISTRY_AUTH (its HTTP Basic login) are set."""
+    url, auth = os.environ.get("LAB_REGISTRY_URL"), os.environ.get("LAB_REGISTRY_AUTH")
+    key = clean_url(url) if url else None
+    return {key: Source(key, (("authorization", f"Basic {auth}"),))} if key and auth else {}
+
+
+def source_for(ecosystem: str, registry: str | None, known: dict[str, Source]) -> Source | None:
+    """Where to read this package from; None for a private registry the service has no login for."""
+    if ecosystem != "npm" or not registry:
+        return Source()
+    url = clean_url(registry)
+    if url == NPM:
+        return Source()
+    return known.get(url) if url else None
+
+
+async def lookup(client: httpx.AsyncClient, ecosystem: str, name: str, requested: str, source: Source | None = None) -> Lookup:
+    if ecosystem == "npm":
+        return await npm_lookup(client, name, requested, source or Source())
+    return await pypi_lookup(client, name, requested)
 
 
 async def weekly_downloads(client: httpx.AsyncClient, ecosystem: str, name: str) -> int | None:
@@ -91,12 +135,13 @@ def _time(value: object) -> datetime | None:
 # npm
 
 
-async def npm_lookup(client: httpx.AsyncClient, name: str, requested: str) -> Lookup:
-    response = await client.get(f"{NPM}/{quote(name, safe='@')}")  # @scope/name -> @scope%2Fname
+async def npm_lookup(client: httpx.AsyncClient, name: str, requested: str, source: Source = Source()) -> Lookup:
+    # @scope/name -> @scope%2Fname
+    response = await client.get(f"{source.url.rstrip('/')}/{quote(name, safe='@')}", headers=dict(source.headers))
     if response.status_code == 404:
         return Missing()
     if response.status_code != 200:
-        raise RegistryError(f"npm answered HTTP {response.status_code}")
+        raise RegistryError(f"the registry answered HTTP {response.status_code}")
     doc = response.json()
     tags = doc.get("dist-tags") or {}
     versions: dict[str, dict] = doc.get("versions") or {}

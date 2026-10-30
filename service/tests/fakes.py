@@ -59,6 +59,10 @@ class FakeNet:
         self.pypi_top = ["boto3", "requests", "numpy", "django"]
         self.down: set[str] = set()
         self.requests: list[httpx.Request] = []
+        # A private registry at https://lab.example: packuments by name, plus raw files (tarballs) by path.
+        self.lab: dict[str, dict] = {}
+        self.blobs: dict[str, bytes] = {}
+        self.lab_auth: list[str | None] = []
 
     def client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(transport=httpx.MockTransport(self.handle))
@@ -71,6 +75,12 @@ class FakeNet:
         host, path = request.url.host, unquote(request.url.raw_path.decode().split("?")[0])
         if host in self.down:
             return httpx.Response(503)
+        if host == "lab.example":
+            self.lab_auth.append(request.headers.get("authorization"))
+            if path in self.blobs:
+                return httpx.Response(200, content=self.blobs[path])
+            doc = self.lab.get(path[1:])
+            return httpx.Response(200, json=doc) if doc else httpx.Response(404, json={"error": "Not found"})
         if host == "registry.npmjs.org" and path == "/-/v1/search":
             found = self.search.get(request.url.params["text"], [])
             return httpx.Response(200, json={"objects": [{"package": {"name": n}, "downloads": {"weekly": w}} for n, w in found]})
