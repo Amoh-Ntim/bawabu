@@ -11,6 +11,7 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Baseten open weights (`muse-spark-open-1026`): chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 4 checks pass, faster than the Meta API. See below |
 | Modal credits | 🟡 Approved | Oct 28: approved, credits being processed |
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
+| **Step 11: evaluation** (test lab with both investigators; top 500 npm) | ✅ **Done** | Oct 30. **9/9 malicious caught in all 7 runs**; final engine **13/13** with Muse Spark and with Muse Spark Open (0 false positives). **Top 500 npm: 500/500 allowed**, 0.7 s median (493 by quick checks; 7 investigated and cleared by Spark). Found and fixed: unreadable C/C++ sources, native builds failing in the sandbox, reviewer-directed wording in our honest fixtures. See `eval/RESULTS.md` |
 | **Step 10: report page** (`/r/<id>` live report, `/live` follow mode) | ✅ **Done** | Oct 30. Served by the Modal service, no new app. Verdict, Spark's steps live, verified evidence with the cited code highlighted, sandbox runs (STOLEN rows), diff, hard rules, discarded claims. Strict CSP + text-only rendering of package content. A real Muse agent's block message linked to the report |
 | **Step 9: open-weights layer** (Muse Spark Open screener on Baseten + `--open-weights` investigator) | ✅ **Done** | Oct 30. Screener clears benign flagged packages in ~5–7 s and sends risky ones on in ~1.3 s by rule. Test lab: the clean one cleared, every risky one escalated (incl. the malicious-dependency one). Real little-used npm packages: 4/7 cleared, 3 escalated by the dependency gate. Open-weights investigator: CI-gated caught via its own re-run, legit allowed. **Deployed:** live `/check` cleared docs-gen-postinstall 1.0.0 via the screener, and an `open_weights` request blocked color-hex-convert (injection + leak) |
 | **Step 7: Muse Spark investigator** (tools, loop, verified evidence, hard rules, events, registry routing, service wiring) | ✅ **Done** | Oct 30. Test lab **7/7 correct** (5 blocked incl. CI-gated and date-gated via Spark's own sandbox re-runs and an obfuscated payload Spark decoded itself; 2 legit allowed). **Deployed**; a real Muse agent's `npm install date-fns-lite-utils` was blocked after a live in-hook investigation (126 s session), with line-cited evidence and a report link; the agent didn't retry another way |
@@ -26,6 +27,50 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
 | One Modal sandbox command | ✅ **Proven** | Oct 28 (smoke) and Oct 30 (full X-ray runs) |
 | Public GitHub repo | ✅ Done | `Amoh-Ntim/bawabu`, created after kickoff |
+
+---
+
+## 2026-10-30 (Fri): Step 11 — evaluation
+
+Full write-up: [eval/RESULTS.md](eval/RESULTS.md). Raw results: `eval/results/*.json`.
+
+### How
+
+`eval/harness.py` runs packages through the real `judge()` (quick checks → screener → investigation), with a fresh
+in-memory cache (nothing replayed) and investigations run in-process (at most 3–4 at a time) instead of spawned on
+Modal. It records which layer decided, the time, Spark's tool calls and re-runs, and verified/rejected evidence.
+`eval/run_lab.py --model meta|open` (13 test-lab cases from `testlab/manifest.json`) and `eval/run_popular.py --top N`.
+
+### Results
+
+- **Test lab: 9/9 malicious caught in every one of 7 runs.** Final engine: **13/13** with Muse Spark (2 runs) and with
+  Muse Spark Open (2 runs), 0 false positives. Spark re-ran the sandbox itself for the CI-gated (`CI=true`) and
+  date-gated (clock moved) packages. Median 36–48 s per investigated package, max 85 s (Muse Spark) / 113 s (Muse Spark
+  Open, so that one package would get "still checking, retry" in the live service).
+- **Top 500 npm: 500/500 allowed, 0 false positives.** 493 by the quick checks (0.7 s median, p95 1.6 s). 7 investigated
+  and cleared by Spark: 5 newly published by "GitHub Actions" (trusted publishing), rxjs (lost provenance), pnpm
+  (install scripts; ran clean in the sandbox).
+
+### What the evaluation found (and what we changed)
+
+1. **Harness bug:** with packages in parallel, "rows created since this check began" picked up other packages'
+   investigations (empty tool-call columns; the screener-cleared package shown as "investigation"). Now matched by name+version.
+2. **Our honest fixtures talked to reviewers** ("a LEGITIMATE pattern that must not be flagged", "must NOT be mistaken
+   for an attack"). Spark treated that as manipulation, as instructed, and blocked image-resize-native. Rewrote the
+   comments as a normal developer would (safety banner kept on executable files), published 1.0.1, and removed the
+   flawed 1.0.0s from our private registry (Spark had also cited the old wording through the diff). Manifest updated with a note.
+3. **Bawabu couldn't read native code:** `.cc`/`.cpp`/`.h` weren't "text" to the diff engine, so `read_file` refused
+   them and Spark (correctly) asked a human. Added C/C++, Rust, Go, Ruby, Perl, PowerShell, batch, TOML, CMake and .txt.
+4. **Native addons never built in the sandbox:** node-gyp tried to download Node's headers (network blocked), then picked
+   the image's Python 3.13, which lacks Debian's `gyp` module. The sandbox image now has `g++`, `make`, `libnode-dev`, and
+   the trigger sets `npm_config_nodedir=/usr` and `npm_config_python=/usr/bin/python3`. The fixture's addon now compiles
+   (`CXX resize.o`, `SOLINK resize.node`, `gyp info ok`) and runs under strace. Deployed.
+
+### Ideas from the data
+
+- A publisher change *to* GitHub Actions *with* provenance is trusted publishing, not a hijack: treating it so would
+  clear 6 of the 7 investigated top packages in ~1 s instead of ~35 s.
+- The top 1,000 (the plan's upper bound) and a second open-weights popular run are still to do if time allows.
 
 ---
 

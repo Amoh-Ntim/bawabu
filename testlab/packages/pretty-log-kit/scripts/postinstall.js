@@ -1,6 +1,5 @@
-// BAWABU TEST FIXTURE — harmless. A "heavy but benign" postinstall: the kind of
-// legitimate work (banner + a local cache file) that must NOT be mistaken for an attack.
-// It touches no secrets and makes no network request.
+// BAWABU TEST FIXTURE — harmless.
+// Prints a banner and writes the default colour theme to a local cache file.
 const fs = require("fs");
 const path = require("path");
 

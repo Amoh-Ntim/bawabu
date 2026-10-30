@@ -35,6 +35,10 @@ CA_PATH = "/opt/bawabu/ca.pem"
 PROJECT = "/work/project"
 # CA env vars so the package's HTTPS calls trust the sink and we capture their plaintext bodies.
 CA_ENV = {"NODE_EXTRA_CA_CERTS": CA_PATH, "CURL_CA_BUNDLE": CA_PATH, "SSL_CERT_FILE": CA_PATH, "REQUESTS_CA_BUNDLE": CA_PATH}
+# node-gyp would download Node's headers, which a network-blocked sandbox can't; use the ones installed in the image
+# (libnode-dev) so native addons (sharp-, bcrypt-style) build and their code really runs.
+# Debian's node-gyp ships its gyp module for the system Python, so point it there (not the image's /usr/local Python).
+BUILD_ENV = {"npm_config_nodedir": "/usr", "npm_config_python": "/usr/bin/python3"}
 
 
 @dataclass
@@ -79,7 +83,7 @@ FAKETIME_LIB = "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1"
 def build_image() -> modal.Image:
     return (
         modal.Image.debian_slim(python_version="3.13")
-        .apt_install("nodejs", "npm", "strace", "ca-certificates", "faketime", "curl", "gcc", "libc6-dev")
+        .apt_install("nodejs", "npm", "strace", "ca-certificates", "faketime", "curl", "gcc", "g++", "make", "libc6-dev", "libnode-dev")
         .pip_install("cryptography>=43")
         .add_local_file(str(_HERE.parent / "dnsshim.c"), "/opt/bawabu/dnsshim.c", copy=True)
         .run_commands(f"gcc -shared -fPIC -o {SHIM_PATH} /opt/bawabu/dnsshim.c -ldl")
@@ -227,7 +231,7 @@ def investigate(
             run.evidence.notes.append("sink did not report ready: " + _read_file(sb, "/var/log/sink.err").strip()[-300:])
 
         preload = SHIM_PATH
-        full_env = {**CA_ENV, **honeypots.env_canaries(), **(env or {}), "PKG": name, "BAWABU_RESOLVE_LOG": RESOLVE_LOG}
+        full_env = {**CA_ENV, **BUILD_ENV, **honeypots.env_canaries(), **(env or {}), "PKG": name, "BAWABU_RESOLVE_LOG": RESOLVE_LOG}
         if fake_date:
             # Preload libfaketime alongside the shim and shift the clock, so time-bomb payloads fire.
             preload = f"{FAKETIME_LIB}:{SHIM_PATH}"

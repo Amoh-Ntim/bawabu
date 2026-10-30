@@ -37,7 +37,11 @@ MAX_UNPACKED = 500 * 1024 * 1024  # decompression-bomb guard on the raw bytes re
 MAX_KEPT = 150 * 1024 * 1024  # what is actually held in memory (big files are kept as a hash)
 MAX_SCAN_FILE = 1024 * 1024  # bigger files are kept as a hash: compared and listed, not scanned
 MAX_DIFF_LINES = 400
-TEXT_EXTENSIONS = (".js", ".cjs", ".mjs", ".ts", ".cts", ".mts", ".jsx", ".tsx", ".json", ".sh", ".py", ".gyp", ".yml", ".yaml", ".md", "")
+TEXT_EXTENSIONS = (
+    ".js", ".cjs", ".mjs", ".ts", ".cts", ".mts", ".jsx", ".tsx", ".json", ".sh", ".py", ".gyp", ".gypi", ".yml", ".yaml", ".md", "",
+    # Native and other source a package may build or run on install: the investigator must be able to read it.
+    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".rs", ".go", ".rb", ".pl", ".ps1", ".bat", ".cmd", ".toml", ".cmake", ".txt",
+)
 
 SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3}
 

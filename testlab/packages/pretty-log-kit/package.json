@@ -1,7 +1,7 @@
 {
   "name": "pretty-log-kit",
-  "version": "1.0.0",
-  "description": "Pretty console logging helpers (Bawabu test fixture: legitimate, heavy-but-benign postinstall).",
+  "version": "1.0.1",
+  "description": "Pretty console logging helpers (Bawabu test fixture).",
   "license": "MIT",
   "main": "index.js",
   "scripts": {
