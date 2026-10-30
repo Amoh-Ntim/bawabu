@@ -11,6 +11,7 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Baseten open weights (`muse-spark-open-1026`): chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 4 checks pass, faster than the Meta API. See below |
 | Modal credits | 🟡 Approved | Oct 28: approved, credits being processed |
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
+| **Step 6: diff engine** (previous-version fetch, in-memory unpack, static signals, what's new) | ✅ **Done** | Oct 30. Hijacked docs-gen-postinstall 2.0.0 flagged HIGH with the exact story; catches the base64 fixture the sandbox missed. 12 popular npm packages (esbuild, sharp, next, core-js, puppeteer, …): all NONE except bcrypt 6.0.0 MEDIUM |
 | **Step 5: sandbox X-ray** (locked Modal sandbox, canaries, strace, fake-internet sink, evidence) | ✅ **Done** | Oct 30. Token-stealer caught (canary POST intercepted over HTTPS); transitive-dep, CI-gated and date-gated variants caught; 3 legit packages not flagged. Trigger-aware re-runs (env + faketime) also working |
 | **Step 1: CLI and hook** (`bawabu init`, `bawabu check`) | ✅ **Done** | Oct 29. A real Muse agent's `npm install left-pad` was blocked, and allowed once allowlisted |
 | **Coverage: bun, pipx, script files, package.json scripts, MCP servers** | ✅ **Done** | Oct 29. 39 unit tests pass. Real agents blocked on `./setup.sh`, `bun run setup` and `pipx install`. MCP edits blocked at the hook |
@@ -22,6 +23,89 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
 | One Modal sandbox command | ✅ **Proven** | Oct 28 (smoke) and Oct 30 (full X-ray runs) |
 | Public GitHub repo | ✅ Done | `Amoh-Ntim/bawabu`, created after kickoff |
+
+---
+
+## 2026-10-30 (Fri): Step 6 — the diff engine
+
+### Result
+
+The diff engine reads a package's code **without running it** and compares it with the version before,
+so its signals say what *changed*. Each signal carries file, line and excerpt (so Step 7 can verify the
+investigator's citations), and is marked **new** or **unchanged since the previous version**. Risk is
+scored on the new signals only (or all of them for a first release).
+
+Test lab (`uv run service/scripts/run_diff.py --lab <pkg>`):
+
+| Fixture | Risk | Top signals |
+|---|---|---|
+| docs-gen-postinstall 2.0.0 (vs 1.0.0) | **HIGH** | Adds `postinstall` (1.0.0 had none) · runs a file new in this version · install-time code reads `.npmrc` **and** makes network requests (line 8) |
+| docs-gen-postinstall 1.0.0 | none | — |
+| string-format-pro-utils | **HIGH** | Long base64 blob that is decoded and run (line 6) · `new Function` (line 9) |
+| color-hex-convert | **HIGH** | Text aimed at AI reviewers (index.js:6) · credential read + network on install |
+| env-loader-plus | **HIGH** | Credential read + network in install code |
+| markdown-tiny-render | low | Depends on console-logs-transport@1.0.0 (listed for the investigator) |
+| fastbundle-bin (legit) | medium | Network on install (the esbuild gray area) |
+| image-resize-native, pretty-log-kit (legit) | medium | Runs code on install |
+
+Real npm (false-positive check, latest vs semver predecessor): **esbuild, sharp, next, core-js, puppeteer,
+prisma, @swc/core, axios, lodash, react, typescript → NONE.** Their install-time downloads and
+`child_process` use are shown as "(unchanged)". **bcrypt 6.0.0 → MEDIUM** (switched install from
+node-pre-gyp to node-gyp-build and added that dependency, which is a legitimate change and fair to look at).
+
+### The sandbox and the diff cover each other
+
+| | Sandbox (Step 5) | Diff (Step 6) |
+|---|---|---|
+| string-format-pro-utils (base64 blob that can't run) | ❌ sees nothing | ✅ HIGH |
+| markdown-tiny-render (payload in a dependency) | ✅ catches the leak | only lists the dependency |
+| docs-gen-postinstall 2.0.0 (hijack) | ✅ (payload runs) | ✅ HIGH, says what changed |
+| fastbundle-bin (legit download) | ✅ only the registry contacted | medium (gray area) |
+
+That's the argument for the funnel and for Spark in Step 7: each layer has blind spots the other covers,
+and Spark weighs both.
+
+### Design (`service/bawabu_service/diff.py`)
+
+- **Fetch:** packument, resolve the version, pick the **semver predecessor** (stable only, unless the target
+  is a prerelease), download both tarballs. Source is configurable (`Source(url, headers)`), so the lab's
+  Verdaccio and its login work. Tarball links on another host (Verdaccio behind Modal) are rewritten to the source.
+- **Unpack in memory:** regular files only; no links, absolute or `..` paths; caps on files (20k), raw bytes
+  (500 MB, bomb guard), kept bytes (150 MB) and tarball (64 MB). Files over 1 MB are kept as a hash: compared,
+  not scanned.
+- **Signals:** install scripts (added = high, changed = medium, unchanged = low); a file run by the install
+  script that's new in this version (high); credential references (high in install code); network /
+  child_process (medium in install code, low elsewhere); **credential read + network in the same install-time
+  file (high: the exfiltration shape)**; base64/hex blobs (high when decoded and run); `eval`/`new Function`
+  (high in install code); prompt injection aimed at AI reviewers (high); lost provenance (high); new dependencies.
+- **Noise control:** comment-only lines don't count for code signals (injection still does); READMEs only
+  checked for injection; minified/`dist/` files skip dynamic-code and long-line checks;
+  `Function("return this")` (the global-object idiom) ignored; unchanged files scanned once.
+
+### Things that bit us
+
+- **"Previous version" by publish time was wrong:** react 19.3.1 was compared with a nightly, axios 1.21.0
+  with a 0.x backport. Switched to the semver predecessor; a semver target with nothing lower has no previous.
+- **Network-on-install alone as HIGH** flagged fastbundle-bin (and would flag esbuild on a first release).
+  Made it medium; the high signal is credential read **plus** network in the same install file.
+- **bcrypt's build-tool switch was HIGH** → a *changed* install command is now medium; the hijack tell
+  (a new file for it to run) stays high.
+- **core-js / next were "too large":** thousands of files and a 30 MB tarball. Raised caps and hashed big files.
+  `next` takes about 18 s of CPU (two versions of huge compiled bundles); fine, because popular packages never
+  reach the diff (the quick checks allow them).
+
+### Tests
+
+12 new tests in `service/tests/test_diff.py`: unsafe tar entries, the hijack (with exact lines), base64 +
+`Function`, injection, the unchanged binary downloader staying quiet, minified/README guards, provenance lost,
+new dependency, first release, semver predecessor, the global-this idiom, and `analyze` end to end against a
+mock registry (auth header + tarball host rewrite). **83 Python tests pass.**
+
+### Still to wire
+
+The engine runs by hand (`run_diff.py`). It joins the service in Step 7, next to the sandbox, as the
+investigator's `get_diff`/`search_code` evidence. The service also needs registry routing (#16) before
+it can judge the lab packages end to end.
 
 ---
 
