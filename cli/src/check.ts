@@ -99,7 +99,7 @@ export async function decide(input: string, getConfig: () => Config, envOverride
 
   let response: CheckResponse;
   try {
-    const answer = await env.post(`${config.serviceUrl.replace(/\/+$/, "")}/check`, checkRequest(toCheck, npmRegistries(cwd, env.home, env.readFile)), SERVICE_TIMEOUT_SECONDS * 1000);
+    const answer = await env.post(`${config.serviceUrl.replace(/\/+$/, "")}/check`, checkRequest(toCheck, npmRegistries(cwd, env.home, env.readFile), config.openWeights), SERVICE_TIMEOUT_SECONDS * 1000);
     response = parseCheckResponse(answer);
   } catch (e) {
     const error = (e as Error).message;

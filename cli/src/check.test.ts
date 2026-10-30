@@ -288,3 +288,12 @@ test("the agent sees the service's red flags and suggestions", async () => {
   const asked = await decide(bash("npm install fresh-helper"), withService(), service(answer("ask", [risky])).env);
   assert.match(asked.message!, /⏸ fresh-helper@0\.1\.0 \(npm\): Bawabu wants a closer look before this is installed\.\n   - The package is only 3 days old\.\n   - It runs code on install \(postinstall\)\./);
 });
+
+test("open-weights mode is sent to the service; by default it isn't", async () => {
+  const on = service(answer("allow", [result("x", "allow")]));
+  await decide(bash("npm install x"), withService({ openWeights: true }), on.env);
+  assert.equal(on.calls[0].body.open_weights, true);
+  const off = service(answer("allow", [result("x", "allow")]));
+  await decide(bash("npm install x"), withService(), off.env);
+  assert.equal("open_weights" in off.calls[0].body, false);
+});

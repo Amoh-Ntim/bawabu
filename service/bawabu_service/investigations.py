@@ -181,7 +181,8 @@ class Investigations:
     def __init__(self, store: Store, spawn: Spawn, budget_s: float = 110, poll_s: float = 2.0) -> None:
         self.store, self.spawn, self.budget_s, self.poll_s = store, spawn, budget_s, poll_s
 
-    async def verdict(self, ecosystem: str, name: str, version: str, source: Source, signals: list[str]) -> Outcome:
+    async def verdict(self, ecosystem: str, name: str, version: str, source: Source, signals: list[str],
+                      open_weights: bool = False) -> Outcome:
         row = await self.store.latest(ecosystem, source.key, name, version)
         if row and row["status"] == "done" and row.get("result"):
             return outcome_from_result(row["result"], row["id"])  # finished already (the cache missed it)
@@ -190,7 +191,8 @@ class Investigations:
         if inv_id is None:
             inv_id = await self.store.create(ecosystem, source.key, name, version)
             await self.spawn(inv_id, {"ecosystem": ecosystem, "name": name, "version": version, "registry_url": source.url,
-                                      "registry_key": source.key, "headers": [list(h) for h in source.headers], "signals": signals})
+                                      "registry_key": source.key, "headers": [list(h) for h in source.headers], "signals": signals,
+                                      "open_weights": open_weights})
         deadline = time.monotonic() + self.budget_s
         while True:
             row = await self.store.get(inv_id)

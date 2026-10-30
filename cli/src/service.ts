@@ -46,7 +46,7 @@ const PYPI_MANAGERS = new Set(["pip", "uv", "uvx", "pipx"]);
 const VERDICTS = new Set(["allow", "block", "ask"]);
 
 /** `registryFor` names the registry an npm package comes from (null: the public npm); only its URL is sent. */
-export function checkRequest(installs: Install[], registryFor: (name: string) => string | null = () => null) {
+export function checkRequest(installs: Install[], registryFor: (name: string) => string | null = () => null, openWeights = false) {
   const packages = new Map<string, { ecosystem: string; name: string; version: string; registry?: string }>();
   for (const p of installs.flatMap((i) => i.packages)) {
     const registry = p.ecosystem === "npm" ? registryFor(p.name) : null;
@@ -54,6 +54,7 @@ export function checkRequest(installs: Install[], registryFor: (name: string) =>
   }
   return {
     client_version: VERSION,
+    ...(openWeights ? { open_weights: true } : {}),
     packages: [...packages.values()],
     manifests: installs
       .filter((i) => i.action === "manifest")

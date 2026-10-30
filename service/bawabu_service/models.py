@@ -29,6 +29,8 @@ class Manifest(BaseModel):
 
 class CheckRequest(BaseModel):
     client_version: str = Field(max_length=32)
+    # Investigate with Muse Spark Open (open weights, on Baseten) instead of Muse Spark on Meta's API.
+    open_weights: bool = False
     packages: list[Package] = Field(default_factory=list, max_length=200)
     manifests: list[Manifest] = Field(default_factory=list, max_length=20)
 

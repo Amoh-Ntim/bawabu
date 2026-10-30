@@ -11,6 +11,7 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Baseten open weights (`muse-spark-open-1026`): chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 4 checks pass, faster than the Meta API. See below |
 | Modal credits | 🟡 Approved | Oct 28: approved, credits being processed |
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
+| **Step 9: open-weights layer** (Muse Spark Open screener on Baseten + `--open-weights` investigator) | 🟡 **Built, deploy pending** | Oct 30. Screener clears benign flagged packages in ~5–7 s and sends risky ones on in ~1.3 s by rule. Test lab: the clean one cleared, every risky one escalated (incl. the malicious-dependency one). Real little-used npm packages: 4/7 cleared, 3 escalated by the dependency gate. Open-weights investigator: CI-gated caught via its own re-run, legit allowed. Deploy waits for `BASETEN_API_KEY` in the Modal secret |
 | **Step 7: Muse Spark investigator** (tools, loop, verified evidence, hard rules, events, registry routing, service wiring) | ✅ **Done** | Oct 30. Test lab **7/7 correct** (5 blocked incl. CI-gated and date-gated via Spark's own sandbox re-runs and an obfuscated payload Spark decoded itself; 2 legit allowed). **Deployed**; a real Muse agent's `npm install date-fns-lite-utils` was blocked after a live in-hook investigation (126 s session), with line-cited evidence and a report link; the agent didn't retry another way |
 | **Step 6: diff engine** (previous-version fetch, in-memory unpack, static signals, what's new) | ✅ **Done** | Oct 30. Hijacked docs-gen-postinstall 2.0.0 flagged HIGH with the exact story; catches the base64 fixture the sandbox missed. 12 popular npm packages (esbuild, sharp, next, core-js, puppeteer, …): all NONE except bcrypt 6.0.0 MEDIUM |
 | **Step 5: sandbox X-ray** (locked Modal sandbox, canaries, strace, fake-internet sink, evidence) | ✅ **Done** | Oct 30. Token-stealer caught (canary POST intercepted over HTTPS); transitive-dep, CI-gated and date-gated variants caught; 3 legit packages not flagged. Trigger-aware re-runs (env + faketime) also working |
@@ -24,6 +25,71 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
 | One Modal sandbox command | ✅ **Proven** | Oct 28 (smoke) and Oct 30 (full X-ray runs) |
 | Public GitHub repo | ✅ Done | `Amoh-Ntim/bawabu`, created after kickoff |
+
+---
+
+## 2026-10-30 (Fri): Step 9 — the open-weights layer (Muse Spark Open)
+
+### Result
+
+Two jobs for **Muse Spark Open** (`meta-models/muse-spark-open-1026`, Meta's open-weights model on Baseten):
+
+1. **The screener** (`service/bawabu_service/screener.py`). It runs between the quick checks' "ask" and the investigation.
+   Most flagged packages are only new or little-used; the screener clears the plainly harmless ones in seconds so
+   only the risky ones pay for the sandbox and Muse Spark (40–75 s).
+2. **Open-weights mode.** `bawabu init --open-weights` sets `"openWeights": true` in `.muse/bawabu.json`; the guard
+   sends `open_weights: true`, and the service runs the whole investigator on Spark Open instead of Meta's API.
+
+**Step 9 "done when" met: the screener allows benign packages and escalates suspicious ones.**
+
+| Package | Screener | How | Time |
+|---|---|---|---|
+| docs-gen-postinstall 1.0.0 (lab, clean) | **allow** | Model: "trivial pure function with no install scripts, network, fs, or exec access" | 6.5 s |
+| markdown-tiny-render (lab, bad dependency) | escalate | Rule: its dependency console-logs-transport isn't an established package | 4.4 s |
+| fastbundle-bin, color-hex-convert, string-format-pro-utils (lab) | escalate | Rule: runs code on install, so it gets the sandbox | ~2 s |
+| string-format-js, @szydlovski/color-convert, @lugia/array-utils, nestjs-dotenv (real npm, <300 downloads/week) | **allow** | Model: pure string/colour/array helpers; a dotenv wrapper with no network | 5–9 s |
+| date-helper-util, @parameter1/slug, vv-logger-tiny (real npm) | escalate | Rule: each depends on another little-used package (same author) | 3–5 s |
+
+The model is only consulted after the rules pass, so every risky lab fixture was escalated **without asking it**.
+
+### Safe by construction
+
+- It can only say **allow** or **escalate**, never block.
+- **Rules first, no model:** escalate if the package runs code on install (it gets the sandbox), if static risk is
+  above "low", if a flag points at a typosquat or a hijack (lookalike name, lost provenance, new publisher, yanked or
+  alarmingly deprecated), or if **any direct dependency doesn't pass the quick checks** (this closes the
+  markdown-tiny-render hole: a clean package that pulls in a bad one), or if there are more than 25 dependencies.
+- Dependencies are judged with the quick checks only, and a dependency's "ask" is **not cached**, so installing it
+  directly later still gets investigated (a test checks this).
+- The model sees the package fenced as data, answers in a fixed JSON format, and is told to escalate when unsure.
+  Any error, timeout or odd answer escalates. A clearance is cached for 24 h only (it skipped the sandbox).
+- The model's escalation reason is passed to the investigator as an extra red flag.
+
+### Open-weights investigator vs Muse Spark on Meta's API
+
+| Case | Spark Open (Baseten) | Spark (Meta API) |
+|---|---|---|
+| string-format-pro-utils (code only) | block, 7 tool calls, **6 s** | block, 11 tool calls, 28 s |
+| ci-build-cache-helper (full, CI-gated) | spotted the gate, **re-ran with CI=true itself**, block, 6/6 evidence verified, **62 s** | same, 74 s |
+| fastbundle-bin (legit) | allow, **5 s** investigator | allow, 11 s |
+
+Spark Open cited the *decoded* payload against the source line, which the verifier rightly rejected. So both models now
+get a **`decoded` evidence type**: the quote must appear in something the `decode` tool actually returned.
+
+### Tests
+
+**Python 116** (+9 screener: plain package cleared in one call and cached under its registry; install scripts and
+static risk skip the model; risky dependency never cleared and its "ask" not cached; established dependencies fine;
+model escalation, outage, bad JSON and odd answers all escalate; the escalation reason reaches the investigator;
+injection text is a gate; the open-weights flag reaches the investigation. +1 decoded evidence). **CLI 60**
+(+1 `openWeights` config, +1 the flag in the request).
+
+### To do
+
+- Create the `bawabu-baseten` Modal secret (BASETEN_API_KEY only; `bawabu-investigator` is unchanged), deploy, and
+  check the screener and open-weights mode on the deployed service.
+- Possible refinement: screen dependencies one level deep instead of requiring them to pass the quick checks, so
+  small packages that depend on their author's other small packages can be cleared too.
 
 ---
 
@@ -822,8 +888,8 @@ Same prompt ("date-picker reads ~/.npmrc and POSTs it on install: verdict?") on 
 | 6 | Can a JSON reply on stdout (`hookSpecificOutput`) give richer feedback than exit 2? | A nicer message for the agent | Probe |
 | 7 | ~~Does the API accept a reasoning-effort setting, and does lower effort cut latency?~~ | **Answered Oct 27:** yes. `minimal` is about 3 times faster (2.3 s against 7 s) with the same verdict on an easy case. Still to check: verdict quality on hard cases | See "Why Spark is slow" above. Recheck in Step 7 on the test lab |
 | 8 | How does the regular `muse-spark-1.3` compare with the contributor model on speed and quality? | The plan uses the regular model for the final demo | Run `smoke_spark.py --model muse-spark-1.3` |
-| 9 | Can we control reasoning on Baseten's Spark Open (it "always reasons"), and how do we read its reasoning output? | Even lower latency for the screener, and the reasoning could be shown on the live page | Try `reasoning_effort` on Baseten. Read Baseten's "Reasoning" doc page |
-| 10 | Does Spark Open's verdict quality match Meta Spark on hard cases? | Decides which model gives the final verdict and which only screens | Run both on the test lab (Steps 7 and 9) |
+| 9 | ✅ **Answered Oct 30.** Can we control reasoning on Baseten's Spark Open? | **Yes: Baseten honours `reasoning_effort`.** Same prompt: 97, 161 and 501 output tokens at minimal, low and high; low took 1.2 s vs 2.1 s by default. The screener uses `low` (9.0 s → 5.0 s on a real package) | Done |
+| 10 | ✅ **Answered Oct 30.** Does Spark Open's verdict quality match Meta Spark on hard cases? | **On the hard cases we tried, yes, and it's faster.** Obfuscated payload: block in 6 s (Meta: 28 s). CI-gated: spotted the gate, re-ran with CI=true itself, block, 6/6 evidence verified, 62 s (Meta: 74 s). Legit downloader: allow in 5 s. Still to do: the full test lab and the eval (Step 11) | Done for now |
 | 11 | ~~Is a large explicit `"timeout"` (for example 180 s) honoured in full, or capped?~~ | **Answered Oct 29:** honoured. A 150 s hook with `"timeout": 180` finished and blocked | See "Step 2: service skeleton" (Oct 29) |
 | 12 | What is Muse's default hook timeout? | Only matters if someone's config has no `timeout`. `bawabu init` always sets one | Low priority |
 | 14 | How should whole-project installs (`npm ci`, `pip install -r`) be checked? | They're the most common install an agent runs after cloning a project, and they're currently allowed unchecked | The CLI sends the direct dependencies plus lockfile entries with `hasInstallScript`. Measure how many packages that is for typical projects |

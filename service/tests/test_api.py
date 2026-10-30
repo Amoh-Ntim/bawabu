@@ -30,7 +30,7 @@ def npm(name: str, version: str = "") -> dict:
 def test_health():
     c, _, _ = service()
     assert c.get("/health").json() == {"ok": True, "version": "0.3.0", "engine": verdicts.ENGINE, "cache": "memory",
-                                       "investigations": False, "private_registries": 0}
+                                       "investigations": False, "screener": False, "private_registries": 0}
 
 
 def test_react_is_allowed_with_its_resolved_version_and_then_cached():

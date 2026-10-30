@@ -19,3 +19,14 @@ test("a config with a plain-http service URL is rejected", () => {
   writeFileSync(path, JSON.stringify({ mode: "block", serviceUrl: "http://bawabu.example", allowlist: [] }));
   assert.throws(() => loadConfig(path), /https/);
 });
+
+test("openWeights defaults to false and must be a boolean", () => {
+  const dir = mkdtempSync(join(tmpdir(), "bawabu-ow-"));
+  const path = join(dir, "bawabu.json");
+  writeFileSync(path, JSON.stringify({ mode: "block", serviceUrl: null }));
+  assert.equal(loadConfig(path).openWeights, false);
+  writeFileSync(path, JSON.stringify({ openWeights: true }));
+  assert.equal(loadConfig(path).openWeights, true);
+  writeFileSync(path, JSON.stringify({ openWeights: "yes" }));
+  assert.throws(() => loadConfig(path), /openWeights/);
+});

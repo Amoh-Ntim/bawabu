@@ -22,7 +22,7 @@ interface HooksFile {
 }
 
 /** Installs the Muse Code hook and config in a project. Returns false if the self-test fails. */
-export async function init(dir: string, options: { force: boolean; serviceUrl?: string }): Promise<boolean> {
+export async function init(dir: string, options: { force: boolean; serviceUrl?: string; openWeights?: boolean }): Promise<boolean> {
   const projectDir = resolve(dir);
   const hooksPath = join(projectDir, ".muse", "hooks.json");
   const configPath = join(projectDir, CONFIG_RELATIVE_PATH);
@@ -32,7 +32,11 @@ export async function init(dir: string, options: { force: boolean; serviceUrl?: 
   }
   // An existing config is kept (allowlist and all); --service only changes the service URL.
   const existing = existsSync(configPath) && !options.force ? loadConfig(configPath) : null;
-  const config: Config = { ...(existing ?? DEFAULT_CONFIG), ...(options.serviceUrl ? { serviceUrl: options.serviceUrl } : {}) };
+  const config: Config = {
+    ...(existing ?? DEFAULT_CONFIG),
+    ...(options.serviceUrl ? { serviceUrl: options.serviceUrl } : {}),
+    ...(options.openWeights ? { openWeights: true } : {}),
+  };
 
   if (!findExecutable("muse") && !existsSync(join(homedir(), ".local", "bin", "muse"))) {
     console.warn("! Muse Code wasn't found. Install it from https://dev.meta.ai, then open this folder in it.");
@@ -48,11 +52,12 @@ export async function init(dir: string, options: { force: boolean; serviceUrl?: 
   writeFileSync(hooksPath, JSON.stringify(hooks, null, 2) + "\n");
   console.log(`✔ Hook installed: ${hooksPath} (PreToolUse, timeout ${HOOK_TIMEOUT_SECONDS}s)`);
 
-  if (existing && !options.serviceUrl) {
+  if (existing && !options.serviceUrl && !options.openWeights) {
     console.log(`✔ Config kept: ${configPath}`);
   } else {
     writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
-    console.log(`✔ Config ${existing ? "updated" : "written"}: ${configPath} (mode: ${config.mode}, service: ${config.serviceUrl ?? "none"})`);
+    console.log(`✔ Config ${existing ? "updated" : "written"}: ${configPath} (mode: ${config.mode}, service: ${config.serviceUrl ?? "none"}` +
+      `${config.openWeights ? ", investigator: Muse Spark Open (open weights)" : ""})`);
   }
 
   const failure = selfTest(command, projectDir);
