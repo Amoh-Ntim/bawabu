@@ -403,6 +403,8 @@ def brief(m: Material) -> str:
         parts.append(f"Static analysis ({since}), risk {m.diff.risk}:\n" + "\n".join(f"- {h}" for h in m.diff.headline(8)))
     if m.sandbox:
         parts.append(f"Sandbox first run: {m.sandbox.get('summary', 'no summary')}")
+    else:
+        parts.append("The sandbox isn't available here, so nothing was run: judge from the code, the diff and the facts.")
     parts.append("Investigate with the tools, then call submit_verdict.")
     return "\n\n".join(parts)
 
@@ -449,6 +451,8 @@ def investigate(m: Material, client: Any, model: str, *, rerun: RerunFn | None =
     started = time.monotonic()
     emit = emit or (lambda e: None)
     box = Toolbox(m, rerun)
+    # Without a sandbox, don't offer its tools: Spark would spend steps asking for runs that can't happen.
+    tools = TOOLS if (rerun or m.sandbox) else [t for t in TOOLS if t["function"]["name"] not in ("rerun_sandbox", "get_sandbox_report")]
     messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": brief(m)}]
     extra = {"reasoning_effort": reasoning_effort} if reasoning_effort else {}
     emit({"kind": "start", "title": f"Investigating {m.name}@{m.version}", "model": model})
@@ -461,14 +465,14 @@ def investigate(m: Material, client: Any, model: str, *, rerun: RerunFn | None =
         try:
             try:
                 response = client.chat.completions.create(
-                    model=model, messages=messages, tools=TOOLS,
+                    model=model, messages=messages, tools=tools,
                     tool_choice={"type": "function", "function": {"name": "submit_verdict"}} if force else "auto", **extra)
             except Exception:
                 if not force:
                     raise
                 # Not every provider supports forcing a specific tool; ask in words instead.
                 messages.append({"role": "user", "content": "You are out of tool calls. Call submit_verdict now."})
-                response = client.chat.completions.create(model=model, messages=messages, tools=TOOLS, **extra)
+                response = client.chat.completions.create(model=model, messages=messages, tools=tools, **extra)
         except Exception as exc:  # the model being down must not crash the check
             error = f"{type(exc).__name__}: {exc}"
             emit({"kind": "error", "title": "The investigator model failed", "detail": error[:300]})

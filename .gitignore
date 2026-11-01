@@ -16,3 +16,4 @@ dist/
 .DS_Store
 .vscode/
 .pytest_cache/
+bawabu-demo/

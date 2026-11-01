@@ -14,3 +14,7 @@ export const SERVICE_TIMEOUT_SECONDS = 140;
 
 /** Inside .muse/ so the agent can't edit it without a human approving each write. */
 export const CONFIG_RELATIVE_PATH = ".muse/bawabu.json";
+
+/** The service run on this machine with your own API keys (service/run_local.py), and its built-in test lab. */
+export const LOCAL_SERVICE_URL = "http://127.0.0.1:8787";
+export const LOCAL_LAB_URL = `${LOCAL_SERVICE_URL}/lab`;

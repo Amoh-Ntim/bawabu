@@ -11,7 +11,8 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Baseten open weights (`muse-spark-open-1026`): chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 4 checks pass, faster than the Meta API. See below |
 | Modal credits | 🟡 Approved | Oct 28: approved, credits being processed |
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
-| **Step 11: evaluation** (test lab with both investigators; top 500 npm) | ✅ **Done** | Oct 30. **9/9 malicious caught in all 7 runs**; final engine **13/13** with Muse Spark and with Muse Spark Open (0 false positives). **Top 500 npm: 500/500 allowed**, 0.7 s median (493 by quick checks; 7 investigated and cleared by Spark). Found and fixed: unreadable C/C++ sources, native builds failing in the sandbox, reviewer-directed wording in our honest fixtures. See `eval/RESULTS.md` |
+| **Step 13: ship** (README, npm publish, video, X post, submission) | 🟡 **In progress** | Oct 30. README written (`README.md`), schema for self-hosting (`service/schema.sql`), report screenshot. Still to do: license, demo video, npm publish, X post, submit |
+| **Step 11: evaluation** (test lab with both investigators; top 500 npm) | ✅ **Done** | Oct 30. **9/9 malicious caught in all 7 runs**; final engine **13/13** with Muse Spark (2 runs) and Muse Spark Open (1 run), 0 false positives. **Top 500 npm: 500/500 allowed**, 0.7 s median (493 by quick checks; 7 investigated and cleared by Spark). Found and fixed: unreadable C/C++ sources, native builds failing in the sandbox, reviewer-directed wording in our honest fixtures. See `eval/RESULTS.md` |
 | **Step 10: report page** (`/r/<id>` live report, `/live` follow mode) | ✅ **Done** | Oct 30. Served by the Modal service, no new app. Verdict, Spark's steps live, verified evidence with the cited code highlighted, sandbox runs (STOLEN rows), diff, hard rules, discarded claims. Strict CSP + text-only rendering of package content. A real Muse agent's block message linked to the report |
 | **Step 9: open-weights layer** (Muse Spark Open screener on Baseten + `--open-weights` investigator) | ✅ **Done** | Oct 30. Screener clears benign flagged packages in ~5–7 s and sends risky ones on in ~1.3 s by rule. Test lab: the clean one cleared, every risky one escalated (incl. the malicious-dependency one). Real little-used npm packages: 4/7 cleared, 3 escalated by the dependency gate. Open-weights investigator: CI-gated caught via its own re-run, legit allowed. **Deployed:** live `/check` cleared docs-gen-postinstall 1.0.0 via the screener, and an `open_weights` request blocked color-hex-convert (injection + leak) |
 | **Step 7: Muse Spark investigator** (tools, loop, verified evidence, hard rules, events, registry routing, service wiring) | ✅ **Done** | Oct 30. Test lab **7/7 correct** (5 blocked incl. CI-gated and date-gated via Spark's own sandbox re-runs and an obfuscated payload Spark decoded itself; 2 legit allowed). **Deployed**; a real Muse agent's `npm install date-fns-lite-utils` was blocked after a live in-hook investigation (126 s session), with line-cited evidence and a report link; the agent didn't retry another way |
@@ -30,6 +31,84 @@ A running record of what we tested, what we found, and how it changes the build.
 
 ---
 
+## 2026-10-30 (Fri): Step 13 (part 2) — try it with your own API key
+
+Judges want to run the code themselves with their own keys, so Bawabu now runs entirely on one machine.
+
+### What was added
+
+- **`uv run service/run_local.py`** (`bawabu_service/local.py`): the whole service in one process with the user's own
+  `META_API_KEY` (and optionally `BASETEN_API_KEY`). In-memory cache and store (no Supabase), investigations in-process
+  (no Modal function), sandbox optional (`--sandbox` needs `modal setup`, and only reaches public packages), and the
+  live feed on. Keys from the environment or `.env`. Prints what's on and what to try.
+- **A built-in test lab** (`bawabu_service/lab_registry.py`): the practice packages served from `testlab/packages` at
+  `/lab` as a tiny npm registry (packuments + reproducible tarballs; two folders can be two versions of one package).
+  **Only Bawabu can download from it**: a per-run token the service holds; npm gets 401, so the samples never reach the
+  judge's disk. The service reads its own lab in-process (a transport that routes lab URLs into the app), so it never
+  calls itself over the network. Its reports may show code (`show_code`).
+- **`bawabu scan <pkg> [--local] [--lab] [--open-weights] [--service] [--registry]`**: one check from the terminal, no
+  agent needed. Sends what the hook sends; waits through "still investigating" by asking again (which joins the
+  investigation); prints verdict, evidence, report link. Exit 0 allowed, 1 blocked, 2 otherwise.
+- **`bawabu demo [dir]`**: a project wired to the local service and its test lab, for trying it in Muse Code.
+  **`bawabu init --local`** too.
+- **No sandbox, no sandbox tools:** when there's no sandbox, Spark isn't offered `rerun_sandbox`/`get_sandbox_report`
+  and its brief says to judge from the code. Before this, it spent a step asking for an impossible CI=true re-run, and
+  the report showed a misleading amber "Re-running the sandbox" step.
+- README: a new "Try it with your own API key" section (steps, a real `scan` output, every practice package, the Muse
+  Code demo, what's different from the hosted service) and a pointer at the top.
+
+### Tested for real (local service, real Meta API, no Modal, no Supabase)
+
+| Check | Result |
+|---|---|
+| `bawabu scan react-datepickr --local` | blocked, "did you mean react-datepicker?", 2 s |
+| `bawabu scan left-pad --local` | allowed, 1 s |
+| **All 13 practice cases** with `--local --lab` | **all correct**: 9 blocked, 4 allowed, 0–18 s each |
+| npm fetching from the lab | 401 |
+| Report page at `127.0.0.1:8787/r/inv-1` | renders, code highlighted |
+| **A real Muse agent in a `bawabu demo` project** (`npm install color-hex-convert`) | the hook blocked it after an in-hook local investigation citing the injection and the token theft; the agent said "I did not retry with another method"; nothing installed; 83 s |
+
+### Things it caught
+
+- **The first demo project gave the answer away.** It had a README listing which packages were malicious. The Muse
+  agent read it, ran `bawabu scan` itself, and declined to install, so the hook was never exercised. The demo project is
+  now just `.muse/`, a one-line `.npmrc` and `package.json`; the suggested prompts are printed in the terminal.
+- **`markdown-tiny-render` was blocked locally for the wrong reason:** Spark cited the sample's own comment ("the danger
+  is its dependency… which carries the payload"). With the sandbox off it can't see inside the dependency. The README
+  says so, and both the README and `eval/RESULTS.md` now state the broader limit: **every sample starts with a comment
+  explaining its trick** (safety labelling), which real malware never does. Verdicts cite code lines, but the comments
+  may make the samples easier. A stricter lab variant without them is an option.
+
+### Tests
+
+**Python 129** (+6 local mode: every package served with its versions; 401 without the token; Bawabu's own readers work
+against the lab; the full local service investigates a practice attack end to end; open-weights requests use the open
+model; the startup banner. +1 no sandbox tools without a sandbox). **CLI 66** (+6 scan and demo).
+
+---
+
+## 2026-10-30 (Fri): Step 13 (part 1) — the README
+
+- **`README.md`**, written for the judges first, then for developers: what it does; a real block message (the time bomb,
+  rebuilt exactly from its stored verdict in the current CLI format) and the agent's reply; a report-page screenshot
+  (`docs/images/report.png`) and four live report links; why; how it works (Mermaid diagram, the funnel, all seven
+  layers); how Meta's models are used; results; try it; run your own; development; layout; **limits**; built during
+  the hackathon; credits.
+- Checked every claim against the code and the logs before publishing. Two corrected: the example message (it uses the
+  current `/r/` link format, so it's "the message Bawabu gives", not a verbatim past message), and the self-hosted URL
+  (Modal URLs include a region; Modal prints it on deploy).
+- Also corrected an overstatement in `eval/RESULTS.md`: Muse Spark Open ran **once** on the final engine (13/13), not
+  twice (its earlier 13/13 run was before the native-code fixes).
+- **`service/schema.sql`**: the three Supabase tables as they are now (they were built through migrations, so nothing
+  in the repo described them). **`.env.example`**: added `BAWABU_REGISTRY`.
+- **`modal_app.py`**: the test-lab registry keys are now optional in `bawabu-investigator` (only `META_API_KEY` is
+  required), so a self-hosted service doesn't need a private registry. Deployed.
+- `bawabu` is **free on npm** (404 on `npm view bawabu`).
+- Couldn't render the Mermaid diagram locally (downloading the Mermaid CLI was blocked); syntax reviewed by hand.
+  Check it on GitHub after pushing.
+
+---
+
 ## 2026-10-30 (Fri): Step 11 — evaluation
 
 Full write-up: [eval/RESULTS.md](eval/RESULTS.md). Raw results: `eval/results/*.json`.
@@ -44,7 +123,7 @@ Modal. It records which layer decided, the time, Spark's tool calls and re-runs,
 ### Results
 
 - **Test lab: 9/9 malicious caught in every one of 7 runs.** Final engine: **13/13** with Muse Spark (2 runs) and with
-  Muse Spark Open (2 runs), 0 false positives. Spark re-ran the sandbox itself for the CI-gated (`CI=true`) and
+  Muse Spark Open (1 run; its earlier run, before the native-code fixes, was also 13/13), 0 false positives. Spark re-ran the sandbox itself for the CI-gated (`CI=true`) and
   date-gated (clock moved) packages. Median 36–48 s per investigated package, max 85 s (Muse Spark) / 113 s (Muse Spark
   Open, so that one package would get "still checking, retry" in the live service).
 - **Top 500 npm: 500/500 allowed, 0 false positives.** 493 by the quick checks (0.7 s median, p95 1.6 s). 7 investigated

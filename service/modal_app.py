@@ -40,7 +40,8 @@ image = (
 app = modal.App("bawabu", image=image)
 secrets = [
     modal.Secret.from_name("bawabu-supabase", required_keys=["SUPABASE_URL", "SUPABASE_SECRET_KEY"]),
-    modal.Secret.from_name("bawabu-investigator", required_keys=["META_API_KEY", "LAB_REGISTRY_URL", "LAB_REGISTRY_AUTH"]),
+    # LAB_REGISTRY_* are optional: without them the service reads only the public npm.
+    modal.Secret.from_name("bawabu-investigator", required_keys=["META_API_KEY"]),
     modal.Secret.from_name("bawabu-baseten", required_keys=["BASETEN_API_KEY"]),
 ]
 

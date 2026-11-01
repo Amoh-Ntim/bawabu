@@ -173,6 +173,18 @@ def test_rerun_budget_and_date_validation():
     assert "used all" in box.call("rerun_sandbox", {"reason": "third"})
 
 
+def test_without_a_sandbox_spark_is_not_offered_sandbox_tools():
+    m = material(None, **{"a.js": "module.exports = 1;\n"})
+    model = FakeModel([[verdict("allow", [], reason="ok", conf="medium")]])
+    investigate(m, model, "x")
+    names = {t["function"]["name"] for t in model.requests[0]["tools"]}
+    assert "rerun_sandbox" not in names and "get_sandbox_report" not in names and "read_file" in names
+    assert "sandbox isn't available" in model.requests[0]["messages"][1]["content"]
+    with_box = FakeModel([[verdict("allow", [], reason="ok", conf="medium")]])
+    investigate(material(CLEAN_RUN), with_box, "x", rerun=lambda env, d: CLEAN_RUN)
+    assert "rerun_sandbox" in {t["function"]["name"] for t in with_box.requests[0]["tools"]}
+
+
 def test_model_outage_falls_back_to_ask():
     events = []
     inv = investigate(material(CLEAN_RUN), FakeModel([], fail=True), "x", emit=events.append)

@@ -9,7 +9,7 @@ Muse Spark. The cache starts empty, so nothing is replayed. Raw results are in [
 | | Result |
 |---|---|
 | **Malicious test-lab packages caught** | **9 / 9**, in every one of 7 runs (63 / 63), with either investigator |
-| **Test lab, overall** (9 malicious, 4 honest) | **13 / 13** with Muse Spark and with Muse Spark Open, on the final engine (2 runs each) |
+| **Test lab, overall** (9 malicious, 4 honest) | **13 / 13** on the final engine with Muse Spark (2 runs) and Muse Spark Open (1 run; also 13 / 13 in its run before the native-code fixes) |
 | **Top 500 npm packages** | **500 / 500 allowed: 0 false positives** |
 | **Time for a normal package** | **0.7 s** median, 1.6 s p95 (493 of the top 500 never needed more than the quick checks) |
 | **Time for a suspicious package** | 32–85 s with Muse Spark (up to 113 s with Muse Spark Open), including a locked-sandbox run of its install scripts |
@@ -83,6 +83,10 @@ a hijack. Treating it as such would let those packages clear in about a second i
 ## Limits
 
 - The test lab is 13 packages we built ourselves; they reproduce real attack shapes but are not real malware.
+- Each sample starts with a comment explaining its trick (part of labelling it as a harmless fixture). Real malware
+  doesn't explain itself. Spark's verdicts cite code lines, but the comments may make the samples easier. A clear case:
+  with the sandbox off (local mode), Spark blocked `markdown-tiny-render` because its own comment names the malicious
+  dependency, evidence the sandbox provides for real. A variant of the lab without these comments would be stricter.
 - The popular-package run covers the top 500; Step 11's plan allows up to 1,000.
 - A malicious package that detects the sandbox and stays dormant, or that only misbehaves at runtime long after install,
   can evade the sandbox; the diff engine and Spark's code reading are the other layers for that.
