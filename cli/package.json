@@ -2,6 +2,24 @@
   "name": "bawabu",
   "version": "0.1.0",
   "description": "A gatekeeper between AI coding agents and the packages they install.",
+  "keywords": [
+    "security",
+    "supply-chain",
+    "npm",
+    "ai-agents",
+    "muse-code",
+    "malware",
+    "sandbox"
+  ],
+  "license": "MIT",
+  "author": "Samuel Amoh Ntim",
+  "homepage": "https://github.com/Amoh-Ntim/bawabu#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Amoh-Ntim/bawabu.git",
+    "directory": "cli"
+  },
+  "bugs": "https://github.com/Amoh-Ntim/bawabu/issues",
   "type": "module",
   "bin": {
     "bawabu": "dist/cli.js"

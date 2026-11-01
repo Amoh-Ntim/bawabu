@@ -18,6 +18,7 @@ Built for the **Meta Global AI Developer Hackathon** (Indie track, *Push the Fro
 | **Top 500 npm packages** | **500 / 500 allowed**: no false positives |
 | **Time for a normal package** | **0.7 s** median |
 | **Built on** | Muse Code · Muse Spark (Meta Model API) · Muse Spark Open (Meta's open weights) |
+| **Install** | `npm i -g bawabu` ([on npm](https://www.npmjs.com/package/bawabu)) |
 
 **Try it with your own API key** in about five minutes, everything on your machine: [jump to the steps](#try-it-with-your-own-api-key).
 
@@ -66,9 +67,16 @@ to `.invalid` addresses, which can never exist on the internet ([how the test la
 AI coding agents now install packages on their own, mid-task, with no human looking at what comes in. Attackers
 have noticed:
 
-- Malicious open-source packages rose **1,444%** from 2024 to 2025 (OpenSSF, cited by Google Threat Intelligence).
-- In May 2026, a self-spreading npm/PyPI worm (Mini Shai-Hulud) compromised **172 packages**.
-- Models invent package names that don't exist, and attackers register those names (*slopsquatting*).
+- The number of malicious open-source packages identified rose **1,444%** from 2024 to 2025, according to OpenSSF data
+  cited by [Google Threat Intelligence](https://cloud.google.com/blog/topics/threat-intelligence/mitigation-guidance-for-supply-chain-compromise).
+  The same report describes an AI coding agent co-authoring a commit that added a malicious package to a real project.
+- In May 2026, the self-spreading **Mini Shai-Hulud** worm compromised **171 npm and PyPI packages** (373 malicious
+  versions, over 518 million combined downloads), including packages from TanStack, UiPath and Mistral AI
+  ([Cloud Security Alliance](https://labs.cloudsecurityalliance.org/research/csa-research-note-shai-hulud-ai-supply-chain-20260517-csa-st/)).
+- Code-generating models invent packages: across 16 models and 576,000 code samples, at least **5.2%** of the packages
+  commercial models used didn't exist, and **21.7%** for open-source models, with 205,474 unique made-up names
+  ([Spracklen et al., USENIX Security 2025](https://arxiv.org/abs/2406.10279)). Attackers register those names and wait
+  (*slopsquatting*).
 - Most defences are **blocklists**: they stop a package only after someone has reported it, which leaves the first
   hours of an attack open, exactly when an agent might install it.
 
@@ -259,15 +267,15 @@ don't need Muse Code to start: `bawabu scan` checks packages from the terminal.
 
 You need [Node.js](https://nodejs.org) 20+ and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
-**1. Install the CLI and the service**
+**1. Install the CLI and get the service**
 
 ```bash
+npm i -g bawabu                                          # the `bawabu` command, from npm
 git clone https://github.com/Amoh-Ntim/bawabu.git && cd bawabu
-(cd cli && npm install && npm run build && npm link)    # the `bawabu` command (once published: npm i -g bawabu)
 uv sync                                                  # Python 3.13 and the service's libraries
 ```
 
-If `npm link` asks for admin rights, skip it and use `alias bawabu="node $PWD/cli/dist/cli.js"` instead.
+To build the CLI from this repo instead: `(cd cli && npm install && npm run build && npm link)`.
 
 **2. Start Bawabu with your key**
 
@@ -337,8 +345,15 @@ Other options: `uv run service/run_local.py --open-weights` investigates with Mu
 
 ### Or use the hosted service
 
-No keys or Python needed: our deployment has the full sandbox. `bawabu scan <package>` without `--local` asks it,
-and `bawabu init` in a project points that project's hook at it. It's a hackathon deployment, so it may be slow,
+No keys, Python or clone needed: our deployment has the full sandbox.
+
+```bash
+npm i -g bawabu
+bawabu scan react-datepickr        # blocked: "did you mean react-datepicker?"
+```
+
+`bawabu scan <package>` without `--local` asks the hosted service, and `bawabu init` in a project points that project's
+hook at it. It's a hackathon deployment, so it may be slow,
 rate-limited or switched off later.
 
 ### Protect your own project
@@ -481,3 +496,7 @@ follows the build plan step by step, and [results.md](results.md) records every 
 Popular npm names from [npm-high-impact](https://github.com/wooorm/npm-high-impact) (MIT), popular PyPI names from
 [top-pypi-packages](https://github.com/hugovk/top-pypi-packages), known malware from [OSV.dev](https://osv.dev).
 Built with Muse Code, Muse Spark and Muse Spark Open from Meta, and on Modal, Baseten, Supabase and Verdaccio.
+
+## License
+
+[MIT](LICENSE). Third-party data and its license: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

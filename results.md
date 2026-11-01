@@ -11,7 +11,7 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Baseten open weights (`muse-spark-open-1026`): chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 4 checks pass, faster than the Meta API. See below |
 | Modal credits | 🟡 Approved | Oct 28: approved, credits being processed |
 | **Modal sandbox: node runs, network blocked, strace works** | ✅ **Proven** | Oct 28. All 3 checks pass. **Step 0 complete** |
-| **Step 13: ship** (README, npm publish, video, X post, submission) | 🟡 **In progress** | Oct 30. README written (`README.md`), schema for self-hosting (`service/schema.sql`), report screenshot. Still to do: license, demo video, npm publish, X post, submit |
+| **Step 13: ship** (README, npm publish, video, X post, submission) | 🟡 **In progress** | Nov 1: **on npm** (`npm i -g bawabu`), MIT license, verified statistics, PDF covers Steps 0–13, try-it-with-your-own-key. Left: public repo, video, submit. Oct 30: README written (`README.md`), schema for self-hosting (`service/schema.sql`), report screenshot. Still to do: license, demo video, npm publish, X post, submit |
 | **Step 11: evaluation** (test lab with both investigators; top 500 npm) | ✅ **Done** | Oct 30. **9/9 malicious caught in all 7 runs**; final engine **13/13** with Muse Spark (2 runs) and Muse Spark Open (1 run), 0 false positives. **Top 500 npm: 500/500 allowed**, 0.7 s median (493 by quick checks; 7 investigated and cleared by Spark). Found and fixed: unreadable C/C++ sources, native builds failing in the sandbox, reviewer-directed wording in our honest fixtures. See `eval/RESULTS.md` |
 | **Step 10: report page** (`/r/<id>` live report, `/live` follow mode) | ✅ **Done** | Oct 30. Served by the Modal service, no new app. Verdict, Spark's steps live, verified evidence with the cited code highlighted, sandbox runs (STOLEN rows), diff, hard rules, discarded claims. Strict CSP + text-only rendering of package content. A real Muse agent's block message linked to the report |
 | **Step 9: open-weights layer** (Muse Spark Open screener on Baseten + `--open-weights` investigator) | ✅ **Done** | Oct 30. Screener clears benign flagged packages in ~5–7 s and sends risky ones on in ~1.3 s by rule. Test lab: the clean one cleared, every risky one escalated (incl. the malicious-dependency one). Real little-used npm packages: 4/7 cleared, 3 escalated by the dependency gate. Open-weights investigator: CI-gated caught via its own re-run, legit allowed. **Deployed:** live `/check` cleared docs-gen-postinstall 1.0.0 via the screener, and an `open_weights` request blocked color-hex-convert (injection + leak) |
@@ -28,6 +28,71 @@ A running record of what we tested, what we found, and how it changes the build.
 | **Muse Spark API: chat, tool calling, structured output** | ✅ **Proven** | Oct 27. All 3 checks pass. See below |
 | One Modal sandbox command | ✅ **Proven** | Oct 28 (smoke) and Oct 30 (full X-ray runs) |
 | Public GitHub repo | ✅ Done | `Amoh-Ntim/bawabu`, created after kickoff |
+
+---
+
+## 2026-11-01 (Sun): Step 13 (part 5) — on npm
+
+- **Published by the user:** `bawabu@0.1.0` on npm (created 2026-11-01 17:12 UTC; maintainer amoh_ntim; MIT; 16 files).
+- **Verified from the public registry:** installed `bawabu` from npm into a throwaway prefix. `--version` 0.1.0; the
+  published `dist/cli.js` is byte-for-byte the repo build; `scan left-pad` allowed and `scan react-datepickr` blocked
+  with "did you mean react-datepicker?" against the hosted service.
+- README: `npm i -g bawabu` in the results strip, the try-it steps (building from source kept as the alternative) and the
+  hosted-service section (no keys, Python or clone needed). PDF section 17 and progress updated (try-it block kept on
+  one page).
+- **Still private:** the GitHub repo. The npm page's links to it are 404 until it's public.
+
+---
+
+## 2026-11-01 (Sun): Step 13 (part 4) — ready to publish on npm; what's left
+
+- **`cli/README.md`** written for the npm package page (install, scan, init, your-own-key, commands, privacy).
+- **Package check:** `npm pack --dry-run` gives 16 files (dist, LICENSE, README, package.json), about 23 kB, no runtime
+  dependencies, no tests or sources. `bawabu` is still free on npm.
+- **Rehearsal:** packed the real tarball, installed it globally into a throwaway prefix, and ran the installed command
+  against the hosted service. `--version` 0.1.0; `scan react-datepickr` blocked with "did you mean react-datepicker?"
+  (exit 1); `scan left-pad` allowed (exit 0); `init` wired the hook to the installed CLI, self-test passed, service reachable.
+- **Not logged in to npm** on this machine (`npm whoami` fails), so publishing waits for the user's `npm login`.
+- **Note:** `cli/.npmrc` has `ignore-scripts=true`, so npm's lifecycle scripts (prepublishOnly) don't run; build
+  explicitly before publishing.
+- **The GitHub repo is PRIVATE** (`gh repo view`: visibility PRIVATE; anonymous API: Not Found). The rules require a
+  public repo, and every GitHub link in the README and on the npm page is a 404 until it's public.
+- **History scan:** no Supabase, Meta, Baseten or registry-password values in any commit (pattern scan over the whole
+  history; counts only, no values printed).
+- Commits carry the author email amohntim123@gmail.com, which becomes visible once the repo is public.
+
+---
+
+## 2026-11-01 (Sun): Step 13 (part 3) — license, statistics, the PDF
+
+### License
+- **MIT** (`LICENSE`, © 2026 Samuel Amoh Ntim), also copied into `cli/` so the npm package carries it.
+- **`THIRD_PARTY_NOTICES.md`**: `popular_npm.py` redistributes the npm-high-impact name list (MIT, Titus Wormer). Its
+  exact license text was taken from the published 1.13.0 tarball, not typed from memory.
+- `cli/package.json`: license, author, homepage, repository, bugs and keywords (what npm shows on the package page).
+- README: a License section.
+
+### Statistics (README "Why"), each checked against a source
+| Claim | Verified | Source |
+|---|---|---|
+| Malicious open-source packages identified rose **1,444%** from 2024 to 2025 | Yes, verbatim: "increased exponentially, or 1,444% from 2024 to 2025" (OpenSSF data) | [Google Threat Intelligence](https://cloud.google.com/blog/topics/threat-intelligence/mitigation-guidance-for-supply-chain-compromise) |
+| An AI coding agent added a malicious package to a real project | Yes: "an AI coding agent co-authored a commit integrating one of the malicious packages as a dependency" | same report |
+| Mini Shai-Hulud, May 2026 | Yes: **169 npm + 2 PyPI packages (171), 373 malicious versions, over 518 million combined downloads**; TanStack, UiPath, Mistral AI. (Mend counts 172, so the plan's figure is right too; the README cites the source we verified.) | [Cloud Security Alliance](https://labs.cloudsecurityalliance.org/research/csa-research-note-shai-hulud-ai-supply-chain-20260517-csa-st/) |
+| Models invent package names | Yes: 16 models, 576,000 samples; at least **5.2%** (commercial) and **21.7%** (open-source) hallucinated; 205,474 unique names | [Spracklen et al., USENIX Security 2025](https://arxiv.org/abs/2406.10279) |
+
+The plan's other figures (4.6–6.1% for 2026 frontier models, "50% more dependencies") weren't verified and aren't used.
+
+### The PDF (`docs/Bawabu-explained.pdf`, 25 pages, Steps 0–13)
+- Refreshed: cover ("what works today", 9 rows), the story table, the architecture diagram (everything built; red =
+  suspicious-only path), the request walkthrough, safety rules (+4), Modal/Baseten/Meta sections, the funnel, the quick
+  checks' verdict table, the test-lab section.
+- New sections, in plain language with the real results: 10 the sealed room (Step 5), 11 the before-and-after check
+  (6), 12 the detective with a real case told step by step, plus "making hidden malware show itself" (7–8), 13 the
+  quick sorter and open weights (9), 14 the report page with the screenshot (10), 15 the exam (11), 16 live scan,
+  skipped on purpose (12), 17 shipping and trying it yourself (13).
+- Files, keys, progress (all 14 steps) and glossary (+7 words) updated.
+- Checked page by page as images (rendered with pypdfium2, since poppler isn't installed): no overflows; layout fixed
+  where a section started at the bottom of a page or a table spilled one row.
 
 ---
 
