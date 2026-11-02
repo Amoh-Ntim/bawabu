@@ -67,6 +67,80 @@
     ]
   },
   {
+    "file": "card-3b-architecture.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "text": [
+      "HOW IT WORKS",
+      "Every install goes through the gate",
+      "YOUR MACHINE",
+      "BAWABU SERVICE · MODAL",
+      "Muse Code",
+      "AI coding agent",
+      "starts an install",
+      "npm install x",
+      "Bawabu hook",
+      "stops the install,",
+      "asks the service",
+      "name + version",
+      "Quick checks",
+      "known malware,",
+      "made-up names",
+      "about 1 s",
+      "Screener",
+      "Muse Spark Open",
+      "(open weights)",
+      "a few seconds",
+      "Investigation",
+      "locked sandbox",
+      "+ Muse Spark",
+      "30–90 s",
+      "allow · block",
+      "allow",
+      "allow · block · ask",
+      "the answer goes back to the agent, with the evidence and a report link",
+      "Most packages are cleared by the quick checks. Only red flags go further."
+    ]
+  },
+  {
+    "file": "card-3c-investigation.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "text": [
+      "INSIDE AN INVESTIGATION",
+      "Muse Spark has to prove every claim",
+      "Diff engine",
+      "what changed since",
+      "the previous version",
+      "Sandbox X-ray",
+      "locked Modal sandbox,",
+      "fake secrets planted",
+      "Muse Spark",
+      "Meta Model API",
+      "reads the code",
+      "decodes what’s hidden",
+      "asks for a sandbox re-run",
+      "cites evidence for each claim",
+      "Evidence check",
+      "every claim checked against",
+      "what the tools saw",
+      "Hard rules",
+      "a stolen fake secret",
+      "means block, always",
+      "re-run",
+      "Verdict",
+      "ALLOW",
+      "BLOCK",
+      "ASK",
+      "with the evidence and a report link · saved in Supabase",
+      "Claims the tools can’t back up are thrown out."
+    ]
+  },
+  {
     "file": "card-4-results.png",
     "size": [
       1920,

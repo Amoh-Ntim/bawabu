@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><rect width="1920" height="1080" fill="#F6F7F9"/>
+<text x="777.961" y="140" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="700" fill="#08786C">INSIDE AN INVESTIGATION</text>
+<text x="433.098" y="215" font-family="Helvetica, Arial, sans-serif" font-size="60" font-weight="700" fill="#101828">Muse Spark has to prove every claim</text>
+<rect x="130" y="300" width="430" height="170" rx="22" fill="#FFFFFF" stroke="#08786C" stroke-width="3"/>
+<text x="262.336" y="370" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="700" fill="#101828">Diff engine</text>
+<text x="243.359" y="415" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#5E687B">what changed since</text>
+<text x="242.098" y="448" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#5E687B">the previous version</text>
+<rect x="130" y="530" width="430" height="170" rx="22" fill="#FFFFFF" stroke="#08786C" stroke-width="3"/>
+<text x="232.969" y="600" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="700" fill="#101828">Sandbox X-ray</text>
+<text x="227.387" y="645" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#5E687B">locked Modal sandbox,</text>
+<text x="242.090" y="678" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#5E687B">fake secrets planted</text>
+<rect x="700" y="300" width="520" height="400" rx="22" fill="#FFFFFF" stroke="#6941C6" stroke-width="3"/>
+<text x="836.508" y="378" font-family="Helvetica, Arial, sans-serif" font-size="44" font-weight="700" fill="#101828">Muse Spark</text>
+<text x="871.742" y="422" font-family="Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#6941C6">Meta Model API</text>
+<text x="860.750" y="500" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="400" fill="#101828">reads the code</text>
+<text x="807.637" y="550" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="400" fill="#101828">decodes what’s hidden</text>
+<text x="789.895" y="600" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="400" fill="#101828">asks for a sandbox re-run</text>
+<text x="767.391" y="650" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="400" fill="#101828">cites evidence for each claim</text>
+<rect x="1360" y="300" width="430" height="170" rx="22" fill="#FFFFFF" stroke="#B54708" stroke-width="3"/>
+<text x="1454.930" y="370" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="700" fill="#101828">Evidence check</text>
+<text x="1430.559" y="415" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#5E687B">every claim checked against</text>
+<text x="1480.402" y="448" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#5E687B">what the tools saw</text>
+<rect x="1360" y="530" width="430" height="170" rx="22" fill="#FFFFFF" stroke="#B42318" stroke-width="3"/>
+<text x="1495.859" y="600" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="700" fill="#101828">Hard rules</text>
+<text x="1475.289" y="645" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#5E687B">a stolen fake secret</text>
+<text x="1468.910" y="678" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#5E687B">means block, always</text>
+<polyline points="560,385 682,385" fill="none" stroke="#5E687B" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="700,385 682,395 682,375" fill="#5E687B"/>
+<polyline points="560,590 682,590" fill="none" stroke="#5E687B" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="700,590 682,600 682,580" fill="#5E687B"/>
+<polyline points="700,650 578,650" fill="none" stroke="#B54708" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="560,650 578,640 578,660" fill="#B54708"/>
+<text x="598.219" y="690" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="#B54708">re-run</text>
+<polyline points="1220,385 1342,385" fill="none" stroke="#5E687B" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="1360,385 1342,395 1342,375" fill="#5E687B"/>
+<polyline points="1575,470 1575,512" fill="none" stroke="#5E687B" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="1575,530 1565,512 1585,512" fill="#5E687B"/>
+<polyline points="1575,700 1575,772" fill="none" stroke="#5E687B" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="1575,790 1565,772 1585,772" fill="#5E687B"/>
+<rect x="130" y="790" width="1660" height="120" rx="22" fill="#FFFFFF" stroke="#D9DEE7" stroke-width="3"/>
+<text x="170.000" y="862" font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="700" fill="#101828">Verdict</text>
+<rect x="340" y="827.2" width="135.9921875" height="45.59999999999991" rx="24" fill="#DCFAE6" stroke="#067647" stroke-width="2"/>
+<text x="364.000" y="858.64" font-family="Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#067647">ALLOW</text>
+<rect x="491.9921875" y="827.2" width="133.34375" height="45.59999999999991" rx="24" fill="#FEE4E2" stroke="#B42318" stroke-width="2"/>
+<text x="515.992" y="858.64" font-family="Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#B42318">BLOCK</text>
+<rect x="641.3359375" y="827.2" width="98.6796875" height="45.59999999999991" rx="24" fill="#FEF0C7" stroke="#B54708" stroke-width="2"/>
+<text x="665.336" y="858.64" font-family="Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#B54708">ASK</text>
+<text x="776.016" y="862" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="400" fill="#5E687B">with the evidence and a report link · saved in Supabase</text>
+<text x="656.480" y="975" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="400" fill="#5E687B">Claims the tools can’t back up are thrown out.</text></svg>

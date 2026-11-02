@@ -1,9 +1,9 @@
 # Bawabu title cards
 
-Seven finished PNGs, each **1920 × 1080**, following `docs/title-cards-plan.md`.
+Nine finished PNGs, each **1920 × 1080**, following `docs/title-cards-plan.md`.
 Import the `card-*.png` files into the video editor at their native size.
 
-**Light mode:** `light mode/` contains a matching set of all seven cards with an
+**Light mode:** `light mode/` contains a matching set of all nine cards with an
 off-white background, dark ink, and deeper teal highlights, plus its own preview
 and editable SVGs. The wording, dimensions, spacing, and mascot match the dark set.
 
@@ -14,10 +14,12 @@ and editable SVGs. The wording, dimensions, spacing, and mascot match the dark s
 | `card-2b-worm.png` | About 0:24 |
 | `card-2c-agent.png` | About 0:30 |
 | `card-3-title.png` | 0:37–0:41 |
+| `card-3b-architecture.png` | 0:41–0:47: how it works (the funnel); replaces the screenshot cutaway |
+| `card-3c-investigation.png` | Optional: inside an investigation; about 4 s at the start of 1:57 "Under the hood", or skip |
 | `card-4-results.png` | 2:21–2:37 |
 | `card-5-end.png` | Closing segment, 2:37–2:50; hold at least 3 seconds |
 
-`preview.png` shows all seven cards together. `source/` contains editable SVGs,
+`preview.png` shows all nine cards together. `source/` contains editable SVGs,
 the exact text manifest, and the Pillow renderer. SVGs retain live text and embed
 the mascot; Helvetica and Menlo should be installed for the closest match.
 The PNGs are the final video assets and do not require fonts to be installed.
@@ -27,9 +29,8 @@ and 256 × 256 PNG exports. The two sized exports are also in `docs/images/` as
 specified by the plan. The mascot appears only on the title and end cards.
 
 `supporting/architecture-page-3.png` is a high-resolution render of page 3 of
-`docs/Bawabu-explained.pdf` for the separate architecture cutaway. It is a portrait
-source image, not one of the seven 16:9 title cards; crop or zoom to the diagram
-in the editor. The overlays and captions described in the plan are editor tasks.
+`docs/Bawabu-explained.pdf` as a fallback for the architecture cutaway. Cards 3b and 3c
+replace it: they redraw the architecture at 16:9, readable in a few seconds of video. The overlays and captions described in the plan are editor tasks.
 
 ## Content verification
 

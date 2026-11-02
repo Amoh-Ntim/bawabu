@@ -1,7 +1,8 @@
 """Builds docs/demo-video-guide.pdf from docs/demo-video-guide.md (Markdown -> styled HTML -> Chrome's print to PDF).
+Given another Markdown file, builds that one instead (same styling, PDF next to it).
 
 From the repo root (macOS, with Google Chrome installed):
-    uv run --no-project --with markdown python docs/make_video_guide.py
+    uv run --no-project --with markdown python docs/make_video_guide.py [docs/demo-recording-script.md]
 """
 
 import re
@@ -13,8 +14,8 @@ from pathlib import Path
 import markdown
 
 HERE = Path(__file__).resolve().parent
-SOURCE = HERE / "demo-video-guide.md"
-OUT = HERE / "demo-video-guide.pdf"
+SOURCE = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else HERE / "demo-video-guide.md"
+OUT = SOURCE.with_suffix(".pdf")
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 CSS = """
@@ -42,7 +43,10 @@ blockquote { margin: 6pt 0; padding: 6pt 10pt; background: #ecfdf5; border-left:
 blockquote p { margin: 3pt 0; }
 hr { border: none; border-top: 1px solid #cbd5e1; margin: 12pt 0; }
 a { color: #0f766e; text-decoration: none; word-break: break-all; }
-.script-start, .appendix { break-before: page; }
+.script-start, .appendix, .page-break { break-before: page; }
+/* Where the picture changes, inside a line to say. */
+.cue { display: inline-block; font-size: 8pt; font-weight: 700; color: #fff; background: #0f766e; border-radius: 3pt;
+       padding: 0 4pt; margin: 0 2pt; font-style: normal; white-space: nowrap; }
 """
 
 
@@ -70,13 +74,14 @@ def main() -> None:
     # Start the script and the read-aloud appendix on fresh pages.
     html = html.replace("<h2>5. The script</h2>", '<h2 class="script-start">5. The script</h2>')
     html = html.replace("<h2>Appendix:", '<h2 class="appendix">Appendix:')
-    page = f'<!doctype html><html><head><meta charset="utf-8"><title>Bawabu demo video guide</title><style>{CSS}</style></head><body>{html}</body></html>'
+    title = next((line[2:] for line in text.splitlines() if line.startswith("# ")), "Bawabu")
+    page = f'<!doctype html><html><head><meta charset="utf-8"><title>{title}</title><style>{CSS}</style></head><body>{html}</body></html>'
     with tempfile.TemporaryDirectory() as tmp:
         source = Path(tmp) / "guide.html"
         source.write_text(page)
         subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--no-pdf-header-footer", f"--print-to-pdf={OUT}",
                         source.as_uri()], check=True, capture_output=True, timeout=120)
-    print("wrote", OUT.relative_to(HERE.parent))
+    print("wrote", OUT.relative_to(HERE.parent) if OUT.is_relative_to(HERE.parent) else OUT)
 
 
 if __name__ == "__main__":

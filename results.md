@@ -54,6 +54,38 @@ A running record of what we tested, what we found, and how it changes the build.
 
 ---
 
+## 2026-11-02 (Mon): Step 13 (part 12) — the recording and voiceover script
+
+**`docs/demo-recording-script.pdf`** (13 pages, from `demo-recording-script.md`): the rehearsal script, in three parts.
+- **Part 1, the screen recording:** one-time setup (Mac, terminal, Chrome, the demo project, trusting the workspace),
+  then every clip step by step: Take A (pre-flight, reload, prompt, and a timed table of what appears on each side),
+  B1, B3–B5 as one scroll, B7, B9 and the spares, with the exact commands, URLs, expected output and file names.
+- **Part 2, the voiceover:** recording tips, pause and stress marks, pronunciations, and the lines V1–V8 (V5 in eight
+  parts tied to on-screen moments), with markers where the picture changes; then the 390-word script in large type for
+  reading aloud.
+- **Part 3:** the edit timeline, second by second: picture, added text and voice.
+- Checked against the live system: the event sequence and timings come from the latest hosted ci-build-cache-helper
+  run (blocked in 23 s, with the CI=true re-run); B1 and B2 output from running `bawabu scan` against the hosted
+  service; the labels from the redesigned report page, which is already deployed (with the mascot).
+- `docs/make_video_guide.py` now builds any Markdown file given as an argument (default: the video guide).
+
+---
+
+## 2026-11-02 (Mon): Step 13 (part 11) — architecture title cards
+
+- Two new cards, drawn by `title cards/source/render_cards.py` in the cards' own style, **dark and light**:
+  - **3b "Every install goes through the gate"** (0:41–0:47): Muse Code → hook → quick checks (about 1 s) → screener
+    (Muse Spark Open, a few seconds) → investigation (30–90 s), what each stage can answer, and the answer going back
+    to the agent. Replaces the screenshot of the PDF diagram, which had too much detail for six seconds of video.
+  - **3c "Muse Spark has to prove every claim"** (optional): diff engine and sandbox feed Spark, the re-run loop,
+    evidence check, hard rules, verdict.
+- The renderer checks that every line fits inside its box and the card margins. Re-rendering left the seven existing
+  cards and the mascot exports byte-for-byte identical.
+- Updated `title cards/README.md`, `docs/title-cards-plan.md` (cards 3b and 3c, both themes) and
+  `docs/demo-video-guide.md` (0:37–0:47 uses card 3b; 3c optional at 1:57), and rebuilt `docs/demo-video-guide.pdf`.
+
+---
+
 ## 2026-11-02 (Mon): Step 13 (part 10) — the mascot on the report page
 
 - The report page header shows the **Bawabu mascot** instead of the building icon, on a light tile so its dark

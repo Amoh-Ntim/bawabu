@@ -72,7 +72,8 @@ carry the title card on their own.
 | **Sizes** | Big numbers 120–160 pt · main lines 48–60 pt · small text 24 pt |
 | **Layout** | Centred, lots of empty space, one idea per card |
 | **Make them in** | Keynote, Google Slides, PowerPoint or Canva; export each as PNG |
-| **Save as** | `docs/video/card-1-context.png`, `card-2a-stat.png`, … (or anywhere outside the repo) |
+| **Save as** | `title cards/card-1-context.png`, `card-2a-stat.png`, … |
+| **Themes** | Every card in two versions: **dark** (above) and **light** (`title cards/light mode/`: off-white `#F6F7F9` background, ink `#101828`, grey `#5E687B`, deeper teal `#08786C`). Same text, sizes and layout. Use one theme for the whole video |
 
 ---
 
@@ -121,8 +122,37 @@ line to *"Before the event: only the idea."*
 | Centre | Bawabu | Huge, white |
 | Below | the gatekeeper between AI coding agents and the packages they install | Medium, grey |
 
-Followed straight away by the **architecture diagram** (a screenshot of page 3 of `docs/Bawabu-explained.pdf`, or the
-README diagram on GitHub): not a card you make.
+Followed straight away by card 3b.
+
+### Card 3b · How it works: the architecture (0:41–0:47)
+
+The architecture redrawn as a card, because the README and PDF diagrams have too much detail to read in six seconds.
+It matches the voiceover: *"Normal packages pass in under a second. Suspicious ones get investigated."*
+
+| Position | Text | Style |
+|---|---|---|
+| Top | HOW IT WORKS | Small, teal |
+| Below | Every install goes through the gate | Big, white |
+| Centre | Five boxes left to right, in two panels: **Your machine** (Muse Code: *npm install x* → Bawabu hook: *name + version*) and **Bawabu service · Modal** (Quick checks: *about 1 s* → Screener, Muse Spark Open: *a few seconds* → Investigation, locked sandbox + Muse Spark: *30–90 s*) | Box titles white, outlines teal / violet / red |
+| Under the boxes | What each stage can answer: *allow · block*, *allow*, *allow · block · ask*, joined by one line back to the hook: "the answer goes back to the agent, with the evidence and a report link" | Pills in the box colours |
+| Bottom | Most packages are cleared by the quick checks. Only red flags go further. | Small, grey |
+
+### Card 3c · Inside an investigation (optional)
+
+Use it only if there's time: about 4 seconds at the start of 1:57 "Under the hood", or skip it.
+
+| Position | Text | Style |
+|---|---|---|
+| Top | INSIDE AN INVESTIGATION | Small, teal |
+| Below | Muse Spark has to prove every claim | Big, white |
+| Left | Diff engine (*what changed since the previous version*) and Sandbox X-ray (*locked Modal sandbox, fake secrets planted*) feed Muse Spark; an amber *re-run* arrow goes back to the sandbox | Teal outlines |
+| Centre | Muse Spark · Meta Model API: reads the code, decodes what's hidden, asks for a sandbox re-run, cites evidence for each claim | Violet outline |
+| Right | Evidence check (*every claim checked against what the tools saw*) → Hard rules (*a stolen fake secret means block, always*) | Amber, red outlines |
+| Bottom bar | Verdict: ALLOW · BLOCK · ASK, with the evidence and a report link · saved in Supabase | Green / red / amber pills |
+| Bottom | Claims the tools can't back up are thrown out. | Small, grey |
+
+Both architecture cards are drawn by `title cards/source/render_cards.py` (dark, and `--theme light`), so they match
+the other cards exactly.
 
 ### Card 4 · Results (2:21–2:37)
 
@@ -170,8 +200,10 @@ Small, grey, at the bottom: *Full results: github.com/Amoh-Ntim/bawabu (eval/RES
 - [ ] Card 2b: 171 packages
 - [ ] Card 2c: an AI agent added a malicious package
 - [ ] Card 3: Bawabu title
+- [ ] Card 3b: how it works (architecture)
+- [ ] Card 3c: inside an investigation (optional)
 - [ ] Card 4: results
 - [ ] Card 5: end card
-- [ ] Architecture diagram screenshot
+- [ ] Light-mode versions of every card
 - [ ] Overlays added in the editor
 - [ ] Every number on the cards matches the voiceover and its source (demo-video-guide.md, section 9)

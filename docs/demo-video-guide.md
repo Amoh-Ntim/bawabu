@@ -43,7 +43,7 @@ else supports that moment.
 | 0:00–0:09 | **What existed before** | Context card: built during the hackathon, what it builds on | ~25 words |
 | 0:09–0:17 | Hook | Muse Code alone, about to install a package | ~20 words |
 | 0:17–0:37 | The problem | Three numbers, one at a time | ~55 words |
-| 0:37–0:47 | Bawabu in one line | Title, then the architecture diagram | ~30 words |
+| 0:37–0:47 | Bawabu in one line | Title card, then the architecture card (3b) | ~30 words |
 | 0:47–1:57 | **Live demo** | **Split screen: Muse Code (left), Bawabu /live (right)** | ~125 words |
 | 1:57–2:21 | Under the hood | Quick cuts: scan, open-weights report, prompt injection | ~55 words |
 | 2:21–2:37 | Results | Numbers card | ~30 words |
@@ -146,8 +146,8 @@ text (captions or labels you add while editing).
 
 ### 0:37–0:47 · Bawabu in one line
 
-**On screen:** title card *"Bawabu: the gatekeeper"*, then the architecture diagram (the README's, or page 3 of
-the PDF).
+**On screen:** title card 3 *"Bawabu: the gatekeeper"* (about 4 s), then architecture card 3b *"Every install goes
+through the gate"* (about 6 s), in `title cards/` (or `title cards/light mode/`).
 
 **Say:**
 > This is Bawabu, Swahili for "gatekeeper". It sits between Muse Code and every package it installs. Normal packages
@@ -179,7 +179,8 @@ on the right.
 
 ### 1:57–2:21 · Under the hood
 
-**On screen:** four quick cuts, about six seconds each (shots B1, B3, B4 and B5 in section 6).
+**On screen:** four quick cuts, about six seconds each (shots B1, B3, B4 and B5 in section 6). Optional: open with
+card 3c *"Muse Spark has to prove every claim"* for about 4 s and trim the cuts to match.
 
 **Say:**
 > Under the hood, it's a funnel. Quick checks clear most packages instantly and catch made-up names. Muse Spark
@@ -237,7 +238,7 @@ Short clips for the cutaways. Record each for a few seconds longer than you need
 | **B7** | One install, one command | Terminal in a fresh folder: `npm i -g bawabu`, then `bawabu init` |
 | **B8** | The npm page | https://www.npmjs.com/package/bawabu |
 | **B9** | The repo | https://github.com/Amoh-Ntim/bawabu (after making it public), scrolling past the results table |
-| **B10** | The architecture diagram | The README's diagram on GitHub, or page 3 of `docs/Bawabu-explained.pdf` |
+| **B10** | The architecture diagram (fallback) | Now a card (3b). If needed: the README's diagram on GitHub, or page 3 of `docs/Bawabu-explained.pdf` |
 
 ---
 
