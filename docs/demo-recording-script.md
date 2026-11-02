@@ -334,13 +334,12 @@ CI = "C-I" · PyPI = "pie-P-I" · 2024 = "twenty twenty-four".
 > <span class="cue">▶ CARD 2A</span> Malicious open-source packages rose by more than **fourteen hundred percent** /
 > from 2024 to 2025. // <span class="cue">▶ CARD 2B</span> In May, / the Mini Shai-Hulud worm compromised **a hundred
 > and seventy-one** npm and PyPI packages. // <span class="cue">▶ CARD 2C</span> Google has already seen an **AI agent**
-> add a malicious package / to a real project. // And blocklists only help / **after** someone has reported the attack.
+> add a malicious package / to a real project. // And the agent installs it in seconds, / **before** any human looks.
 
 #### V4 · 0:37–0:47 · Bawabu in one line (about 10 s)
 **Picture:** Card 3, then Card 3b.
 
-> <span class="cue">▶ CARD 3</span> This is **Bawabu**, / Swahili for "gatekeeper". // It sits between Muse Code and
-> every package it installs. // <span class="cue">▶ CARD 3B</span> Normal packages pass in **under a second**. /
+> <span class="cue">▶ CARD 3</span> This is **Bawabu**, / Swahili for "gatekeeper". // It sits between Muse Code and the packages it installs. // <span class="cue">▶ CARD 3B</span> Normal packages pass in **under a second**. /
 > Suspicious ones get **investigated**.
 
 #### V5 · 0:47–1:57 · The live demo (about 70 s, with silent beats)
@@ -386,7 +385,7 @@ screen.
 #### V7 · 2:21–2:37 · Results (about 16 s)
 **Picture:** Card 4.
 
-> We tested it. // It caught **nine out of nine** attack samples in every run, / with both models. // And it blocked
+> We tested it. // It caught **nine out of nine** attacks in our test lab, / in every run, / with both models. // And it blocked
 > **none** of the five hundred most popular npm packages.
 
 #### V8 · 2:37–2:50 · Try it, close (about 13 s)
@@ -407,7 +406,7 @@ screen.
 
 <div class="page-break"></div>
 
-**The full script, for reading aloud** (390 words, about 2:40):
+**The full script, for reading aloud** (394 words, about 2:40):
 
 > Before this hackathon, Bawabu didn't exist. It was built from scratch during the event, on Meta's Muse Code, Muse
 > Spark and Muse Spark Open.
@@ -416,9 +415,9 @@ screen.
 >
 > Malicious open-source packages rose by more than fourteen hundred percent from 2024 to 2025. In May, the Mini
 > Shai-Hulud worm compromised a hundred and seventy-one npm and PyPI packages. Google has already seen an AI agent add a
-> malicious package to a real project. And blocklists only help after someone has reported the attack.
+> malicious package to a real project. And the agent installs it in seconds, before any human looks.
 >
-> This is Bawabu, Swahili for "gatekeeper". It sits between Muse Code and every package it installs. Normal packages
+> This is Bawabu, Swahili for "gatekeeper". It sits between Muse Code and the packages it installs. Normal packages
 > pass in under a second. Suspicious ones get investigated.
 >
 > I ask Muse Code to add a build-cache helper for our CI. It's one of our harmless test packages. The agent runs npm
@@ -437,7 +436,7 @@ screen.
 > never instructions: a note telling AI reviewers to approve a package counts against it. And hard rules always beat
 > the model.
 >
-> We tested it. It caught nine out of nine attack samples in every run, with both models. And it blocked none of the
+> We tested it. It caught nine out of nine attacks in our test lab, in every run, with both models. And it blocked none of the
 > five hundred most popular npm packages.
 >
 > Bawabu is open source and on npm today: one install, one command. Or run it on your own laptop with your own Meta API

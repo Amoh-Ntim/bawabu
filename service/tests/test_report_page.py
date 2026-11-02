@@ -156,3 +156,7 @@ def test_live_feed_is_off_unless_turned_on():
     rows = client.get("/investigations?limit=5").json()
     assert rows[0]["id"] == inv_id and rows[0]["name"] == "env-loader-plus" and rows[0]["verdict"] == "block"
     assert rows[0]["private_registry"] is True and "registry" not in rows[0]  # never the registry's address
+
+
+def test_a_failed_sandbox_run_is_never_shown_as_clean():
+    assert "!rep.error && !(rep.network || []).length" in report_page.PAGE

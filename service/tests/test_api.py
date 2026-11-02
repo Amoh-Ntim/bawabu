@@ -123,10 +123,10 @@ def test_block_wins_and_duplicates_are_judged_once():
     assert [r["name"] for r in body["results"]] == ["left-pad", "crossenv"]
 
 
-def test_manifests_still_pass_with_a_note():
+def test_manifests_pass_with_a_note_their_dependencies_are_checked_as_packages():
     c, _, _ = service()
     body = check(c, manifests=[{"ecosystem": "npm", "manager": "npm"}])
-    assert body["verdict"] == "allow" and "aren't checked yet" in body["manifests"][0]["reason"]
+    assert body["verdict"] == "allow" and "direct dependencies are checked" in body["manifests"][0]["reason"]
 
 
 def test_bad_input_is_rejected():

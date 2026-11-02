@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><rect width="1920" height="1080" fill="#0B0F17"/>
 <text x="777.961" y="140" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="700" fill="#2DD4BF">INSIDE AN INVESTIGATION</text>
-<text x="433.098" y="215" font-family="Helvetica, Arial, sans-serif" font-size="60" font-weight="700" fill="#E6EBF5">Muse Spark has to prove every claim</text>
+<text x="429.832" y="215" font-family="Helvetica, Arial, sans-serif" font-size="60" font-weight="700" fill="#E6EBF5">Muse Spark has to show its evidence</text>
 <rect x="130" y="300" width="430" height="170" rx="22" fill="#121826" stroke="#2DD4BF" stroke-width="3"/>
 <text x="262.336" y="370" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="700" fill="#E6EBF5">Diff engine</text>
 <text x="243.359" y="415" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#8B97B0">what changed since</text>
@@ -18,7 +18,7 @@
 <text x="767.391" y="650" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="400" fill="#E6EBF5">cites evidence for each claim</text>
 <rect x="1360" y="300" width="430" height="170" rx="22" fill="#121826" stroke="#FBBF24" stroke-width="3"/>
 <text x="1454.930" y="370" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="700" fill="#E6EBF5">Evidence check</text>
-<text x="1430.559" y="415" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#8B97B0">every claim checked against</text>
+<text x="1428.617" y="415" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#8B97B0">every quote checked against</text>
 <text x="1480.402" y="448" font-family="Helvetica, Arial, sans-serif" font-size="23" font-weight="400" fill="#8B97B0">what the tools saw</text>
 <rect x="1360" y="530" width="430" height="170" rx="22" fill="#121826" stroke="#F87171" stroke-width="3"/>
 <text x="1495.859" y="600" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="700" fill="#E6EBF5">Hard rules</text>
@@ -46,4 +46,4 @@
 <rect x="641.3359375" y="827.2" width="98.6796875" height="45.59999999999991" rx="24" fill="#2A2110" stroke="#FBBF24" stroke-width="2"/>
 <text x="665.336" y="858.64" font-family="Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#FBBF24">ASK</text>
 <text x="776.016" y="862" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="400" fill="#8B97B0">with the evidence and a report link · saved in Supabase</text>
-<text x="656.480" y="975" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="400" fill="#8B97B0">Claims the tools can’t back up are thrown out.</text></svg>
+<text x="550.570" y="975" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="400" fill="#8B97B0">Evidence that doesn’t match what the tools saw is thrown out.</text></svg>

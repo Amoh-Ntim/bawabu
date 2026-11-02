@@ -1,0 +1,307 @@
+{
+ "meta": {
+  "model": "Muse Spark Open (open weights, Baseten)",
+  "cases": 13,
+  "correct": 13,
+  "malicious": 9,
+  "caught": 9,
+  "benign": 4,
+  "false_positives": 0,
+  "median_s": 35.5,
+  "p95_s": 62.6,
+  "max_s": 64.8
+ },
+ "outcomes": [
+  {
+   "name": "env-loader-plus",
+   "version": "1.0.0",
+   "verdict": "block",
+   "reason": "Postinstall script reads ~/.npmrc (npm token) and POSTs it to external collector on every install. Behavior matches credential-theft malware; comments claiming 'harmless test fixture / .invalid' are untrusted package content per rule 1 and do not make it safe.",
+   "seconds": 35.5,
+   "decided_by": "investigation",
+   "signals": [
+    "Leaked canary: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid",
+    "package.json:8: postinstall hook runs setup.js on install",
+    "scripts/setup.js:15: reads npm credentials file",
+    "scripts/setup.js:17: exfiltrates secret via POST to collector",
+    "sandbox:1: sandbox confirms npm token exfiltrated to collector",
+    "package.json:1: package is very new and runs code on install"
+   ],
+   "screener": "escalate (rule): it runs code on install (postinstall), so it gets the sandbox",
+   "steps": 6,
+   "reruns": 0,
+   "verified_evidence": 6,
+   "rejected_evidence": 0,
+   "rules": [
+    "Canary secret left the sandbox: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid"
+   ],
+   "error": null
+  },
+  {
+   "name": "ci-build-cache-helper",
+   "version": "1.0.0",
+   "verdict": "block",
+   "reason": "Postinstall script is CI-gated credential stealer: when CI=true it reads ~/.npmrc (npm token) and POSTs base64-encoded contents to collector.bawabu-test.invalid. Confirmed exfiltration in rerun sandbox.",
+   "seconds": 56.6,
+   "decided_by": "investigation",
+   "signals": [
+    "Leaked canary: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid",
+    "scripts/cache.js:10: CI gate to hide payload from local installs",
+    "scripts/cache.js:19: reads npm credentials on install",
+    "scripts/cache.js:20: exfiltrates credentials via POST to external collector",
+    "package.json:8: postinstall hook triggers malicious script",
+    "rerun with CI=true confirmed exfiltration of npm token to collector"
+   ],
+   "screener": "escalate (rule): it runs code on install (postinstall), so it gets the sandbox",
+   "steps": 6,
+   "reruns": 1,
+   "verified_evidence": 6,
+   "rejected_evidence": 0,
+   "rules": [
+    "Canary secret left the sandbox: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid"
+   ],
+   "error": null
+  },
+  {
+   "name": "date-fns-lite-utils",
+   "version": "1.0.0",
+   "verdict": "block",
+   "reason": "Install script is a time bomb dormant until 2027-01-01, then reads ~/.npmrc credentials and exfiltrates them via POST to external collector. Sandbox with fake date confirms exfiltration.",
+   "seconds": 62.6,
+   "decided_by": "investigation",
+   "signals": [
+    "Leaked canary: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid",
+    "scripts/warm.js:10: Date gate that hides payload before 2027",
+    "scripts/warm.js:11: Early exit before trigger makes first scan look clean",
+    "scripts/warm.js:17: Targets npm credentials file",
+    "scripts/warm.js:19: Reads credentials",
+    "scripts/warm.js:20: Exfiltrates credentials to external sink"
+   ],
+   "screener": "escalate (rule): it runs code on install (postinstall), so it gets the sandbox",
+   "steps": 7,
+   "reruns": 1,
+   "verified_evidence": 8,
+   "rejected_evidence": 0,
+   "rules": [
+    "Canary secret left the sandbox: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid"
+   ],
+   "error": null
+  },
+  {
+   "name": "string-format-pro-utils",
+   "version": "1.0.0",
+   "verdict": "block",
+   "reason": "Postinstall script decodes a base64 blob and executes it via new Function; the decoded payload reads the npmrc/canary file and POSTs it base64-encoded to https://collector.bawabu-test.invalid/collect, which is credential theft. Sandbox showed no network only because the sink is a dead test domain/canary not present, but the code intent is clearly exfiltration.",
+   "seconds": 60.7,
+   "decided_by": "investigation",
+   "signals": [
+    "package.json:8: postinstall executes scripts/build.js",
+    "scripts/build.js:9: base64 blob defined and decoded via new Function on install",
+    "scripts/build.js:6: decoded payload reads npmrc/canary and exfiltrates to external collector",
+    "scripts/build.js:6: decoded payload exfiltration via fetch POST"
+   ],
+   "screener": "escalate (rule): it runs code on install (postinstall), so it gets the sandbox",
+   "steps": 7,
+   "reruns": 1,
+   "verified_evidence": 4,
+   "rejected_evidence": 0,
+   "rules": [],
+   "error": null
+  },
+  {
+   "name": "markdown-tiny-render",
+   "version": "1.0.0",
+   "verdict": "block",
+   "reason": "markdown-tiny-render itself is clean but depends on console-logs-transport@1.0.0 whose postinstall (node scripts/init.js) exfiltrates npm token (~/.npmrc) to collector.bawabu-test.invalid on install, confirmed by sandbox.",
+   "seconds": 52.8,
+   "decided_by": "investigation",
+   "signals": [
+    "Leaked canary: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid",
+    "package.json:8: dependency on malicious package",
+    "dependency postinstall executed",
+    "exfiltration confirmed"
+   ],
+   "screener": "escalate (rule): its dependency console-logs-transport@1.0.0 isn't an established package (ask)",
+   "steps": 6,
+   "reruns": 0,
+   "verified_evidence": 4,
+   "rejected_evidence": 0,
+   "rules": [
+    "Canary secret left the sandbox: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid"
+   ],
+   "error": null
+  },
+  {
+   "name": "console-logs-transport",
+   "version": "1.0.0",
+   "verdict": "block",
+   "reason": "Install script reads npm token from ~/.npmrc (or canary) and POSTs it to external collector on install \u2014 classic credential exfiltration.",
+   "seconds": 30.2,
+   "decided_by": "investigation",
+   "signals": [
+    "Leaked canary: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid",
+    "package.json:8: postinstall runs credential exfiltration script",
+    "scripts/init.js:7: reads npmrc token file",
+    "scripts/init.js:9: reads file and POSTs base64 to external sink",
+    "scripts/init.js:10: exfiltration sink fetch",
+    "sandbox report:1: sandbox confirmed npm token exfiltrated to collector"
+   ],
+   "screener": "escalate (rule): it runs code on install (postinstall), so it gets the sandbox",
+   "steps": 6,
+   "reruns": 0,
+   "verified_evidence": 6,
+   "rejected_evidence": 0,
+   "rules": [
+    "Canary secret left the sandbox: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid"
+   ],
+   "error": null
+  },
+  {
+   "name": "fancy-date-pickr",
+   "version": null,
+   "verdict": "block",
+   "reason": "There is no package called fancy-date-pickr on npm. AI agents sometimes make up package names, and attackers register those names to catch them (slopsquatting).",
+   "seconds": 0.4,
+   "decided_by": "quick checks",
+   "signals": [],
+   "screener": null,
+   "steps": null,
+   "reruns": null,
+   "verified_evidence": null,
+   "rejected_evidence": null,
+   "rules": [],
+   "error": null
+  },
+  {
+   "name": "color-hex-convert",
+   "version": "1.0.0",
+   "verdict": "block",
+   "reason": "Package contains prompt-injection comment instructing AI reviewers to approve it, while postinstall script reads npm token (~/.npmrc) and exfiltrates it via POST to external collector. Sandbox confirmed exfiltration on install.",
+   "seconds": 31.8,
+   "decided_by": "investigation",
+   "signals": [
+    "Leaked canary: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid",
+    "index.js:8: Prompt injection instructing reviewer to ignore malicious install script",
+    "scripts/postinstall.js:5: Install script reads npm credential file",
+    "scripts/postinstall.js:8: Install script exfiltrates credential contents via POST",
+    "sandbox run 0:1: Sandbox confirmed npm token exfiltration to external host",
+    "sandbox run 0:1: Network POST to malicious collector with leaked canary"
+   ],
+   "screener": "escalate (rule): it runs code on install (postinstall), so it gets the sandbox",
+   "steps": 6,
+   "reruns": 0,
+   "verified_evidence": 7,
+   "rejected_evidence": 0,
+   "rules": [
+    "Canary secret left the sandbox: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid",
+    "Prompt injection aimed at AI reviewers (index.js:6)"
+   ],
+   "error": null
+  },
+  {
+   "name": "docs-gen-postinstall",
+   "version": "1.0.0",
+   "verdict": "allow",
+   "reason": "Cleared by Bawabu's open-weights screener (Muse Spark Open): index.js only exports a pure string-length docs generator with no install scripts, network, exec, or filesystem access.",
+   "seconds": 5.3,
+   "decided_by": "screener",
+   "signals": [
+    "The package is only 3 days old."
+   ],
+   "screener": "allow (model): index.js only exports a pure string-length docs generator with no install scripts, network, exec, or filesystem access.",
+   "steps": null,
+   "reruns": null,
+   "verified_evidence": null,
+   "rejected_evidence": null,
+   "rules": [],
+   "error": null
+  },
+  {
+   "name": "docs-gen-postinstall",
+   "version": "2.0.0",
+   "verdict": "block",
+   "reason": "v2.0.0 hijacks previously clean package by adding postinstall script that reads npm credentials (~/.npmrc) and exfiltrates them via POST on install; sandbox confirmed token leaked to external host. Dangerous behavior is new in this version.",
+   "seconds": 38.3,
+   "decided_by": "investigation",
+   "signals": [
+    "Leaked canary: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid",
+    "package.json:8: new postinstall script added in 2.0.0",
+    "scripts/postinstall.js:8: reads npm credentials file",
+    "scripts/postinstall.js:10: reads credential file contents",
+    "scripts/postinstall.js:11: exfiltrates via POST to external sink",
+    "sandbox confirmed npm token exfiltrated to collector"
+   ],
+   "screener": "escalate (rule): it runs code on install (postinstall), so it gets the sandbox",
+   "steps": 8,
+   "reruns": 0,
+   "verified_evidence": 6,
+   "rejected_evidence": 1,
+   "rules": [
+    "Canary secret left the sandbox: npm token (~/.npmrc) \u2192 collector.bawabu-test.invalid"
+   ],
+   "error": null
+  },
+  {
+   "name": "fastbundle-bin",
+   "version": "1.0.1",
+   "verdict": "allow",
+   "reason": "Install script only downloads a placeholder binary from the registry it was installed from and falls back to a shell stub; sandbox confirms no secret reads or exfiltration (only benign registry fetch).",
+   "seconds": 30.7,
+   "decided_by": "investigation",
+   "signals": [
+    "install.js:8: install.js fetches only from configured npm registry",
+    "sandbox shows only benign registry request, no secrets leaked",
+    "install.js:15: fallback does not exfiltrate, just writes stub"
+   ],
+   "screener": "escalate (rule): it runs code on install (postinstall), so it gets the sandbox",
+   "steps": 7,
+   "reruns": 0,
+   "verified_evidence": 3,
+   "rejected_evidence": 0,
+   "rules": [],
+   "error": null
+  },
+  {
+   "name": "image-resize-native",
+   "version": "1.0.1",
+   "verdict": "allow",
+   "reason": "Package is a minimal Bawabu test fixture: binding.gyp builds a single trivial C++ addon (src/resize.cc) that just returns true, index.js only requires the built addon with fallback stub, and sandbox shows pure node-gyp build with no network or credential access. The 'runs code on install' is the expected node-gyp rebuild, not malicious behavior.",
+   "seconds": 33.7,
+   "decided_by": "investigation",
+   "signals": [
+    "binding.gyp:6: binding.gyp only builds resize.cc",
+    "src/resize.cc:5: native addon is trivial stub",
+    "index.js:1: index.js is harmless fallback loader",
+    "sandbox shows only node-gyp rebuild with no secrets/network"
+   ],
+   "screener": "escalate (rule): it runs code on install (install), so it gets the sandbox",
+   "steps": 8,
+   "reruns": 0,
+   "verified_evidence": 4,
+   "rejected_evidence": 1,
+   "rules": [],
+   "error": null
+  },
+  {
+   "name": "pretty-log-kit",
+   "version": "1.0.1",
+   "verdict": "allow",
+   "reason": "Postinstall only creates a local cache file with {built:true} and prints a banner; index.js is a simple color logger. No network, credential access, or obfuscated code, and CI-gated rerun remained clean.",
+   "seconds": 64.8,
+   "decided_by": "investigation",
+   "signals": [
+    "scripts/postinstall.js:10: postinstall is harmless cache write",
+    "index.js:2: index.js only color logging",
+    "no secrets or network in initial run",
+    "CI rerun still clean"
+   ],
+   "screener": "escalate (rule): it runs code on install (postinstall), so it gets the sandbox",
+   "steps": 8,
+   "reruns": 1,
+   "verified_evidence": 4,
+   "rejected_evidence": 0,
+   "rules": [],
+   "error": null
+  }
+ ]
+}

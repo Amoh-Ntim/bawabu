@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import gzip
 import json
 import re
 from dataclasses import dataclass, field
@@ -136,7 +137,7 @@ def build(
                 ev.dns_queries.append(name)
         elif kind == "http":
             host = ev_row.get("host", "") or ""
-            body = ev_row.get("body_text", "") or ""
+            body = _body(ev_row)
             blob = " ".join([host, ev_row.get("path", ""), json.dumps(ev_row.get("headers", {})), body])
             hits = _scan(blob, canaries)
             attempt = NetworkAttempt(
@@ -164,3 +165,20 @@ def build(
     elif ev.secret_reads and any(not n.benign_destination and n.scheme != "dns" for n in ev.network):
         ev.notes.append("The package read a secret file and also made outbound requests; inspect the payloads.")
     return ev
+
+
+def _body(row: dict) -> str:
+    """A request body as text. The sink keeps non-UTF-8 bodies as base64: decode those byte for byte (and un-gzip them),
+    so a canary sent in a binary or compressed body is still found."""
+    if row.get("body_text"):
+        return row["body_text"]
+    try:
+        raw = base64.b64decode(row.get("body_b64") or "")
+    except (binascii.Error, ValueError):
+        return ""
+    if raw[:2] == b"\x1f\x8b":
+        try:
+            raw = gzip.decompress(raw)
+        except (OSError, EOFError):
+            pass
+    return raw.decode("latin-1")

@@ -7,7 +7,7 @@
  */
 
 import { isAbsolute, join, resolve } from "node:path";
-import { detect, type Install } from "./managers.js";
+import { detect, parseNpmDependency, parsePipSpec, type Install, type PackageSpec } from "./managers.js";
 import { lex, type Command } from "./shell.js";
 
 export type { Install, PackageSpec } from "./managers.js";
@@ -38,10 +38,24 @@ export const REASONS = {
   missingScript: "it runs a script file that doesn't exist yet or can't be read",
   nested: "scripts call each other too deeply to follow",
   mcpShellEdit: "it edits an MCP server config from the shell instead of the file tools",
+  source: "it tells the package manager to download from somewhere other than the project's registry, which Bawabu can't follow yet",
+  manifest: "it installs from a dependency list Bawabu can't read",
+  inlineCode: "it runs an install from inside another program, where Bawabu can't see what's installed",
 } as const;
 
 const MANAGER_WORD = /(^|[^\w-])(npm|npx|pnpm|pnpx|yarn|bun|bunx|pip\d?(\.\d+)?|pipx|uv|uvx)([^\w-]|$)/;
 const MAX_DEPTH = 6;
+/** The dependency kinds `npm install` fetches (peer dependencies too, since npm 7). */
+const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
+/** Settings, in a variable or an export, that change where packages are downloaded from. */
+const SOURCE_ENV = /\b(?:npm_config_(?:registry|userconfig|globalconfig|@[\w-]+:registry)|yarn_(?:npm_)?registry(?:_server)?|bun_config_registry|pip_(?:index_url|extra_index_url|find_links|config_file)|uv_(?:index_url|extra_index_url|default_index|index|find_links|config_file))\s*=/i;
+/** An install command inside code run by an interpreter: `node -e "..."` or `python -c "..."`. */
+const INSTALL_IN_CODE = /\b(?:npm|pnpm|yarn|bun|pip3?|uv|pipx)\b['",\s]+(?:[\w-]+['",\s]+)?(?:install|add|i|ci|sync)\b/;
+/** The same inside a script file, only as a call (execSync("npm install x"), subprocess.run(["pip", "install", ...])),
+ * so scripts that merely print "pip install x" as advice still run. */
+const INSTALL_CALL = /(?:exec\w*|spawn\w*|system|popen|run|call|check_call|check_output)\s*\(\s*\[?\s*(?:[\w.]+\s*,\s*)?(?:['"`]-m['"`]\s*,\s*)?['"`](?:npm|pnpm|yarn|bun|pip3?|uv|pipx)\b['",\s]+(?:[\w-]+['",\s]+)?(?:install|add|i|ci|sync)\b/;
+const INTERPRETER = /^(node|python\d?(\.\d+)?|ruby|perl|deno)$/;
+const INLINE_CODE_FLAGS = new Set(["-e", "--eval", "-p", "--print", "-c", "-E"]);
 /** Lifecycle scripts the project's own package.json runs on a whole-project install. */
 const LIFECYCLE = ["preinstall", "install", "postinstall", "prepublish", "preprepare", "prepare", "postprepare"];
 const JS_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
@@ -62,6 +76,7 @@ export function analyze(command: string, ctx: Context, depth = 0): Analysis {
   for (const sub of lexed.substitutions) merge(result, analyze(sub, ctx, depth + 1));
   let cwd = ctx.cwd;
   for (const cmd of lexed.commands) cwd = analyzeCommand(cmd, { ...ctx, cwd }, depth, result) ?? cwd;
+  if (result.installs.length && SOURCE_ENV.test(command)) result.unreadable.push({ command: brief(command), reason: REASONS.source });
   return result;
 }
 
@@ -106,12 +121,87 @@ function analyzeCommand(cmd: Command, ctx: Context, depth: number, result: Analy
     const found = detect(prog, args, brief(words.join(" ")));
     if (found?.kind === "install") {
       result.installs.push(found.install);
+      listDependencies(found.install, ctx, result, shown);
       if (found.install.action === "manifest" && JS_MANAGERS.has(found.install.manager)) runScripts(ctx.cwd, LIFECYCLE, ctx, depth, result);
-    } else if (found?.kind === "unreadable") result.unreadable.push({ command: shown, reason: REASONS.dynamicName });
+    } else if (found?.kind === "unreadable") result.unreadable.push({ command: shown, reason: found.reason === "source" ? REASONS.source : REASONS.dynamicName });
     else if (found?.kind === "scripts") runScripts(found.dir ? resolvePath(ctx, found.dir) : ctx.cwd, found.names, ctx, depth, result);
+    else if (INTERPRETER.test(prog)) analyzeInterpreter(args, ctx, result, shown);
     else if (words[0].includes("/")) analyzeScript(words[0], ctx, depth, result, shown, true);
   }
   return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// What a whole-project install (or a script's inline metadata) will fetch
+
+/** Adds the packages an install reads from files: package.json, requirement files, a script's `# /// script` block. */
+function listDependencies(install: Install, ctx: Context, result: Analysis, shown: string): void {
+  const add = (specs: (PackageSpec | null)[]) => {
+    if (specs.some((s) => !s)) result.unreadable.push({ command: shown, reason: REASONS.manifest });
+    install.packages.push(...specs.filter((s): s is PackageSpec => !!s));
+  };
+  if (install.action === "manifest" && JS_MANAGERS.has(install.manager)) {
+    const file = ctx.readFile(join(install.dir ? resolvePath(ctx, install.dir) : ctx.cwd, "package.json"));
+    if (file.kind !== "text") return; // nothing to install without one
+    let manifest: Record<string, unknown>;
+    try {
+      manifest = JSON.parse(file.content);
+    } catch {
+      return; // the package manager would fail on it too
+    }
+    for (const field of DEPENDENCY_FIELDS) {
+      const deps = manifest?.[field];
+      if (deps && typeof deps === "object") {
+        add(Object.entries(deps).map(([name, range]) => (typeof range === "string" ? parseNpmDependency(name, range) : null)));
+      }
+    }
+  }
+  for (const path of install.requirements ?? []) add(requirementFile(resolvePath(ctx, path), ctx, 0));
+  if (install.script) {
+    const file = ctx.readFile(resolvePath(ctx, install.script));
+    if (file.kind === "missing") result.unreadable.push({ command: shown, reason: REASONS.missingScript });
+    else if (file.kind === "text") add(inlineDependencies(file.content));
+  }
+}
+
+/** The packages in a pip requirements file, following -r includes; null entries are lines Bawabu can't read. */
+function requirementFile(path: string, ctx: Context, depth: number): (PackageSpec | null)[] {
+  const file = ctx.readFile(path);
+  if (file.kind !== "text" || depth > 3) return [null];
+  const specs: (PackageSpec | null)[] = [];
+  for (const raw of file.content.split("\n")) {
+    const line = raw.replace(/(^|\s)#.*$/, "").trim();
+    if (!line) continue;
+    const include = line.match(/^(?:-r|--requirement)[\s=]*(\S+)$/);
+    if (include) specs.push(...requirementFile(resolvePath({ ...ctx, cwd: join(path, "..") }, include[1]), ctx, depth + 1));
+    else if (/^(-i|--index-url|--extra-index-url|-f|--find-links)\b/.test(line)) specs.push(null); // a different download source
+    else if (line.startsWith("-")) continue; // other options (--hash, -c constraints) don't add packages
+    else specs.push(parsePipSpec(line));
+  }
+  return specs;
+}
+
+/** PEP 723: `dependencies = ["requests<3", "rich"]` inside a `# /// script` comment block. */
+function inlineDependencies(content: string): (PackageSpec | null)[] {
+  const block = content.match(/^# \/\/\/ script\s*$([\s\S]*?)^# \/\/\/\s*$/m);
+  if (!block) return [];
+  const toml = block[1].split("\n").map((l) => l.replace(/^#\s?/, "")).join("\n");
+  const deps = toml.match(/^dependencies\s*=\s*\[([\s\S]*?)\]/m);
+  if (!deps) return /^dependencies\b/m.test(toml) ? [null] : [];
+  return [...deps[1].matchAll(/"([^"]*)"|'([^']*)'/g)].map((m) => parsePipSpec((m[1] ?? m[2]).trim()));
+}
+
+/** `node -e "...npm install..."`, `python -c ...`, or a local script that shells out to an install. */
+function analyzeInterpreter(args: string[], ctx: Context, result: Analysis, shown: string): void {
+  const flag = args.findIndex((a) => INLINE_CODE_FLAGS.has(a));
+  if (flag >= 0) {
+    if (INSTALL_IN_CODE.test(args.slice(flag + 1).join(" "))) result.unreadable.push({ command: shown, reason: REASONS.inlineCode });
+    return;
+  }
+  const script = args.find((a) => !a.startsWith("-"));
+  if (!script || args.includes("-m")) return;
+  const file = ctx.readFile(resolvePath(ctx, script));
+  if (file.kind === "text" && INSTALL_CALL.test(file.content)) result.unreadable.push({ command: shown, reason: REASONS.inlineCode });
 }
 
 // ---------------------------------------------------------------------------

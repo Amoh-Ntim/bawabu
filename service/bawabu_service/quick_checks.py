@@ -111,7 +111,7 @@ def _judge_facts(f: Facts, malicious: list[str] | None, lookalike_of: str | None
         facts.append(f"{ago(age)} old")
     if downloads is not None:
         facts.append(f"{downloads:,} downloads last week")
-    facts.append(f"same install code ({scripts}) as the previous version" if f.install_scripts else "no code runs on install")
+    facts.append(f"same install command ({scripts}) as the previous version" if f.install_scripts else "no code runs on install")
     if version_age is not None and version_age < FRESH_VERSION:
         facts.append(f"this version is {ago(version_age)} old")
     if f.deprecated:

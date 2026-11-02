@@ -19,17 +19,28 @@ export interface Install {
   action: "add" | "manifest" | "exec";
   packages: PackageSpec[];
   command: string;
+  /** Where a whole-project install reads package.json (--prefix, --cwd, --dir), if not the current directory. */
+  dir?: string;
+  /** Requirement files a pip install reads (-r). */
+  requirements?: string[];
+  /** A Python script whose inline metadata (# /// script) lists dependencies uv installs before running it. */
+  script?: string;
 }
 
 export type Detected =
   | { kind: "install"; install: Install }
-  /** A package name we can't read, such as $PKG. */
-  | { kind: "unreadable" }
+  /** A package name we can't read, such as $PKG (`source`: the command downloads from somewhere else). */
+  | { kind: "unreadable"; reason?: "source" }
   /** package.json scripts to run, in `dir` (default: the current directory). */
   | { kind: "scripts"; dir: string | undefined; names: string[] }
   | null;
 
 export function detect(prog: string, args: string[], command: string): Detected {
+  const found = detectManager(prog, args, command);
+  return found?.kind === "install" && overridesSource(prog, args) ? { kind: "unreadable", reason: "source" } : found;
+}
+
+function detectManager(prog: string, args: string[], command: string): Detected {
   switch (prog) {
     case "npm":
       return detectNpm(args, command);
@@ -88,14 +99,56 @@ function subcommand(args: string[], valueFlags: ReadonlySet<string>): [string | 
   return [undefined, []];
 }
 
-function makeInstall(manager: string, action: Install["action"], specs: string[], ecosystem: Ecosystem, command: string): Detected {
+function makeInstall(manager: string, action: Install["action"], specs: string[], ecosystem: Ecosystem, command: string,
+                     extra: Pick<Install, "dir" | "requirements" | "script"> = {}): Detected {
   const packages: PackageSpec[] = [];
   for (const raw of specs) {
     const spec = ecosystem === "npm" ? parseNpmSpec(raw) : parsePipSpec(raw);
     if (!spec) return { kind: "unreadable" };
     packages.push(spec);
   }
-  return { kind: "install", install: { manager, action, packages, command } };
+  return { kind: "install", install: { manager, action, packages, command, ...extra } };
+}
+
+// ---------------------------------------------------------------------------
+// Download sources: the registry Bawabu checks must be the one the install uses
+
+const PUBLIC_NPM = /^https?:\/\/registry\.(npmjs\.org|yarnpkg\.com)\/?$/;
+const PUBLIC_PYPI = /^https?:\/\/pypi\.(org|python\.org)\/simple\/?$/;
+
+/** Flags that send the download somewhere other than the registry Bawabu reads from .npmrc (or the public PyPI). */
+function overridesSource(prog: string, args: string[]): boolean {
+  const npmFamily = (valueFlags: ReadonlySet<string>, urlFlags: string[], fileFlags: string[]) => {
+    const { values } = parseArgs(args, valueFlags);
+    return [...values].some(([flag, vals]) =>
+      fileFlags.includes(flag) || /^--@[^:]+:registry$/.test(flag) || (urlFlags.includes(flag) && vals.some((v) => !PUBLIC_NPM.test(v))));
+  };
+  const python = (valueFlags: ReadonlySet<string>) => {
+    const { values } = parseArgs(args, valueFlags);
+    return [...values].some(([flag, vals]) =>
+      ["-f", "--find-links", "--config-file"].includes(flag) ||
+      (flag === "--pip-args" && vals.some((v) => /index-url|find-links|(^|\s)-[if]\b/.test(v))) ||
+      (["-i", "--index-url", "--extra-index-url", "--default-index", "--index"].includes(flag) && vals.some((v) => !PUBLIC_PYPI.test(v))));
+  };
+  switch (prog) {
+    case "npm":
+    case "npx":
+      return npmFamily(NPM_VALUE_FLAGS, ["--registry"], ["--userconfig", "--globalconfig"]);
+    case "pnpm":
+    case "pnpx":
+      return npmFamily(PNPM_VALUE_FLAGS, ["--registry"], []);
+    case "yarn":
+      return npmFamily(YARN_VALUE_FLAGS, ["--registry"], []);
+    case "bun":
+    case "bunx":
+      return npmFamily(BUN_VALUE_FLAGS, ["--registry"], ["--config", "-c"]);
+    case "uv":
+    case "uvx":
+      return python(UV_VALUE_FLAGS);
+    case "pipx":
+      return python(PIPX_VALUE_FLAGS);
+  }
+  return python(PIP_VALUE_FLAGS);
 }
 
 /** npm, yarn and bun also run pre<name> and post<name>; listing them for pnpm too errs on the safe side. */
@@ -124,10 +177,10 @@ const NPM_LIFECYCLE = new Map([["start", "start"], ["stop", "stop"], ["restart",
 function detectNpm(args: string[], command: string): Detected {
   const { positional, values } = parseArgs(args, NPM_VALUE_FLAGS);
   const [sub, ...rest] = positional;
-  const dir = values.get("--prefix")?.[0];
+  const dir = (values.get("--prefix") ?? values.get("-C"))?.[0];
   if (sub === undefined) return null;
-  if (NPM_INSTALL.has(sub) || NPM_UPDATE.has(sub)) return makeInstall("npm", rest.length ? "add" : "manifest", rest, "npm", command);
-  if (NPM_CI.has(sub)) return makeInstall("npm", "manifest", [], "npm", command);
+  if (NPM_INSTALL.has(sub) || NPM_UPDATE.has(sub)) return makeInstall("npm", rest.length ? "add" : "manifest", rest, "npm", command, { dir });
+  if (NPM_CI.has(sub)) return makeInstall("npm", "manifest", [], "npm", command, { dir });
   if (NPM_EXEC.has(sub)) return execInstall("npm", values, rest, command);
   if (NPM_CREATE.has(sub)) return createInstall("npm", rest, command);
   if (NPM_RUN.has(sub)) return rest[0] ? runScripts(dir, rest[0]) : null;
@@ -169,7 +222,7 @@ function detectPnpm(args: string[], command: string): Detected {
   const [sub, ...rest] = positional;
   const dir = (values.get("--dir") ?? values.get("-C"))?.[0];
   if (sub === undefined) return null;
-  if (["add", "install", "i", "update", "up", "upgrade"].includes(sub)) return makeInstall("pnpm", rest.length ? "add" : "manifest", rest, "npm", command);
+  if (["add", "install", "i", "update", "up", "upgrade"].includes(sub)) return makeInstall("pnpm", rest.length ? "add" : "manifest", rest, "npm", command, { dir });
   if (sub === "dlx") return execInstall("pnpm", values, rest, command);
   if (sub === "create") return createInstall("pnpm", rest, command);
   if (sub === "run" || sub === "run-script") return rest[0] ? runScripts(dir, rest[0]) : null;
@@ -193,11 +246,11 @@ function detectYarn(args: string[], command: string): Detected {
   if (sub === "global") [sub, ...rest] = rest;
   if (sub === undefined) {
     // Bare `yarn` installs the project's dependencies; `yarn --version` doesn't.
-    return args.some((a) => ["--version", "-v", "--help", "-h"].includes(a)) ? null : makeInstall("yarn", "manifest", [], "npm", command);
+    return args.some((a) => ["--version", "-v", "--help", "-h"].includes(a)) ? null : makeInstall("yarn", "manifest", [], "npm", command, { dir });
   }
-  if (sub === "install") return makeInstall("yarn", "manifest", [], "npm", command);
+  if (sub === "install") return makeInstall("yarn", "manifest", [], "npm", command, { dir });
   if (sub === "add" || sub === "up" || sub === "upgrade" || sub === "upgrade-interactive") {
-    return makeInstall("yarn", rest.length ? "add" : "manifest", rest, "npm", command);
+    return makeInstall("yarn", rest.length ? "add" : "manifest", rest, "npm", command, { dir });
   }
   if (sub === "dlx") return execInstall("yarn", values, rest, command);
   if (sub === "create") return createInstall("yarn", rest, command);
@@ -218,7 +271,7 @@ function detectBun(args: string[], command: string): Detected {
   const dir = values.get("--cwd")?.[0];
   if (sub === undefined) return null;
   if (sub === "add" || sub === "a") return rest.length ? makeInstall("bun", "add", rest, "npm", command) : null;
-  if (sub === "install" || sub === "i" || sub === "update") return makeInstall("bun", rest.length ? "add" : "manifest", rest, "npm", command);
+  if (sub === "install" || sub === "i" || sub === "update") return makeInstall("bun", rest.length ? "add" : "manifest", rest, "npm", command, { dir });
   if (sub === "x") return execInstall("bun", values, rest, command);
   if (sub === "create" || sub === "c") {
     // `bun create user/repo` clones a GitHub template; `bun create vite` runs create-vite.
@@ -245,9 +298,11 @@ function detectPip(manager: string, args: string[], command: string): Detected {
   if (sub !== "install") return null;
   const editable = [...(values.get("-e") ?? []), ...(values.get("--editable") ?? [])];
   const fromFile = [...values.keys()].some((k) => /^(-r|-c|--requirement|--constraint)/.test(k));
+  // -r file, --requirement file, --requirement=file, or -rfile.
+  const requirements = [...values].flatMap(([k, v]) => (k === "-r" || k === "--requirement" ? v : /^-r./.test(k) ? [k.slice(2)] : [])).filter(Boolean);
   const specs = [...rest, ...editable];
-  if (!specs.length) return fromFile ? makeInstall(manager, "manifest", [], "pypi", command) : null;
-  return makeInstall(manager, fromFile ? "manifest" : "add", specs, "pypi", command);
+  if (!specs.length) return fromFile ? makeInstall(manager, "manifest", [], "pypi", command, { requirements }) : null;
+  return makeInstall(manager, fromFile ? "manifest" : "add", specs, "pypi", command, { requirements });
 }
 
 const UV_VALUE_FLAGS = new Set([
@@ -265,7 +320,8 @@ function detectUv(args: string[], command: string): Detected {
   if (sub === "tool" && positional[0] === "run") return detectUvx("uv", rest.slice(rest.indexOf("run") + 1), command);
   if (sub === "run") {
     const extra = (values.get("--with") ?? []).flatMap((w) => w.split(","));
-    return extra.length ? makeInstall("uv", "add", extra, "pypi", command) : null;
+    const script = values.get("--script")?.[0] ?? (positional[0]?.endsWith(".py") ? positional[0] : undefined);
+    return extra.length || script ? makeInstall("uv", "add", extra, "pypi", command, script ? { script } : {}) : null;
   }
   return null;
 }
@@ -320,6 +376,22 @@ export function parseNpmSpec(raw: string): PackageSpec | null {
   const version = at > 0 ? raw.slice(at + 1) : "";
   if (!NPM_NAME.test(name) || /[\s$`]/.test(version)) return null;
   return pkg(name, version, "registry");
+}
+
+/** One entry of package.json's dependencies: `"name": "^1.2.0"`, an alias, a git repo, a URL or a local path. */
+export function parseNpmDependency(name: string, range: string): PackageSpec | null {
+  const raw = `${name}@${range}`;
+  const pkg = (n: string, version: string, source: Source): PackageSpec => ({ ecosystem: "npm", name: n, version, source, raw });
+  const spec = range.trim();
+  if (/^(file|link|workspace|portal|patch):/.test(spec) || PATH_LIKE.test(spec)) return pkg(spec.replace(/^(file|link):/, ""), "", "path");
+  if (spec.startsWith("npm:")) {
+    const real = parseNpmSpec(spec.slice(4));
+    return real && { ...real, raw };
+  }
+  if (/^https?:\/\//.test(spec)) return pkg(spec, "", "url");
+  if (/^(git\+|git:\/\/|github:|gitlab:|bitbucket:|gist:)/.test(spec) || /^[\w.-]+\/[\w.-]+(#.*)?$/.test(spec)) return pkg(spec, "", "git");
+  if (!NPM_NAME.test(name) || /[$`]/.test(spec)) return null;
+  return pkg(name, spec, "registry");
 }
 
 const PEP508 = /^([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)\s*(?:\[[^\]]*\])?\s*(.*)$/;

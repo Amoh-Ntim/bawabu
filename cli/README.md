@@ -3,10 +3,10 @@
 **The gatekeeper between AI coding agents and the packages they install.**
 
 When an AI coding agent ([Muse Code](https://dev.meta.ai/docs/overview)) runs `npm install`, Bawabu stops the install,
-checks the package, and lets it in only if it's safe. Most packages are cleared in about a second. Suspicious ones are
-run in a locked cloud sandbox baited with fake secrets and investigated by **Muse Spark**, which reads the code, decodes
-what's hidden, re-runs the sandbox under the conditions the malware is waiting for, and must back every claim with
-evidence that Bawabu checks.
+checks the package, and lets it in only when it finds no evidence of harm. Most packages are cleared in about a second.
+Suspicious ones are run in a locked cloud sandbox baited with fake secrets and investigated by **Muse Spark**, which
+reads the code, decodes what's hidden, re-runs the sandbox under the conditions the malware is waiting for, and has to
+quote its evidence, which Bawabu checks against what the tools saw.
 
 Full story, results and design: **[github.com/Amoh-Ntim/bawabu](https://github.com/Amoh-Ntim/bawabu#readme)**
 
@@ -33,9 +33,11 @@ cd your-project
 bawabu init                     # installs the Muse Code hook and .muse/bawabu.json
 ```
 
-Then open the project in Muse Code and trust the workspace. Every install the agent tries (npm, npx, pnpm, yarn, bun,
-pip, uv, pipx, including ones hidden in scripts, and new MCP servers) is checked first. The agent gets the verdict
-with the evidence, and is told not to try another way.
+Then open the project in Muse Code and trust the workspace. The installs the agent runs (npm, npx, pnpm, yarn, bun,
+pip, uv, pipx, including ones hidden in scripts, whole-project installs with their direct dependencies, and new MCP
+servers) are checked first; installs it can't see into are blocked. The agent gets the verdict with the evidence, and
+is told not to try another way. It protects a well-meaning agent from bad packages; it isn't a sandbox around a
+hostile one (see [Limits](https://github.com/Amoh-Ntim/bawabu#limits)).
 
 ## Use your own API key
 

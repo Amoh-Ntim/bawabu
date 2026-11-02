@@ -40,6 +40,10 @@ type Subject = { kind: "command"; command: string; analysis: Analysis } | { kind
 
 const ALLOW: Decision = { exitCode: 0 };
 const MCP_KEY = /"mcp(Servers|_servers)"/;
+/** A downloaded package file: unlike a folder of the user's own code, it can come from anywhere. */
+const ARCHIVE = /\.(tgz|tar\.gz|tar|whl|zip)$/i;
+/** The service judges at most this many packages per request (service/bawabu_service/models.py). */
+const MAX_PACKAGES = 200;
 
 const block = (message: string, record?: Record<string, unknown>): Decision => ({ exitCode: 2, message, record });
 
@@ -95,11 +99,18 @@ export async function decide(input: string, getConfig: () => Config, envOverride
   if (!config.serviceUrl) return block(noServiceMessage(subject, toCheck), { ...record, decision: "block", reason: "no service" });
 
   const unsupported = toCheck.flatMap((i) => i.packages.filter((p) => p.source !== "registry"));
-  if (unsupported.length) return block(unsupportedMessage(unsupported), { ...record, decision: "block", reason: "git or url source" });
+  if (unsupported.length) return block(unsupportedMessage(unsupported), { ...record, decision: "block", reason: "git, url or archive source" });
+  const request = checkRequest(toCheck, npmRegistries(cwd, env.home, env.readFile), config.openWeights);
+  if (request.packages.length > MAX_PACKAGES) {
+    return block(
+      `⛔ Blocked by Bawabu: this installs ${request.packages.length} packages, more than it can check at once (${MAX_PACKAGES}). Install them in smaller groups, or ask the user.`,
+      { ...record, decision: "block", reason: "too many packages" },
+    );
+  }
 
   let response: CheckResponse;
   try {
-    const answer = await env.post(`${config.serviceUrl.replace(/\/+$/, "")}/check`, checkRequest(toCheck, npmRegistries(cwd, env.home, env.readFile), config.openWeights), SERVICE_TIMEOUT_SECONDS * 1000);
+    const answer = await env.post(`${config.serviceUrl.replace(/\/+$/, "")}/check`, request, SERVICE_TIMEOUT_SECONDS * 1000);
     response = parseCheckResponse(answer);
   } catch (e) {
     const error = (e as Error).message;
@@ -140,7 +151,7 @@ function mcpEdit(tool: "write_file" | "edit_file", input: NonNullable<HookPayloa
 }
 
 function needsCheck(p: PackageSpec, install: Install, config: Config, cwd: string, env: Env): boolean {
-  if (p.source === "path") return false; // the user's own code on disk
+  if (p.source === "path") return ARCHIVE.test(p.name); // a folder is the user's own code; a package file isn't
   if (config.allowlist.some((entry) => entry === p.name || (entry.endsWith("/*") && p.name.startsWith(entry.slice(0, -1))))) return false;
   // `npx eslint` runs the project's own copy when it's installed; nothing is fetched.
   if (install.action === "exec" && p.ecosystem === "npm" && p.source === "registry" && !p.version && env.binExists(cwd, p.name.split("/").pop()!)) return false;
@@ -202,7 +213,7 @@ function verdictMessage(subject: Subject, response: CheckResponse, serviceUrl: s
 
 function unsupportedMessage(packages: PackageSpec[]): string {
   return [
-    `⛔ Blocked by Bawabu: ${packages.map((p) => `\`${p.raw}\``).join(", ")} ${packages.length > 1 ? "come" : "comes"} from a git repo or URL, which Bawabu can't check yet.`,
+    `⛔ Blocked by Bawabu: ${packages.map((p) => `\`${p.raw}\``).join(", ")} ${packages.length > 1 ? "come" : "comes"} from a git repo, a URL or a package file, which Bawabu can't check yet.`,
     "Install from the registry instead, or ask the user; if they trust it, they can allowlist it in .muse/bawabu.json.",
   ].join("\n");
 }

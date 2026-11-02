@@ -1,4 +1,4 @@
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 
 /** Muse kills the hook after this long, and a killed hook lets the command run, so we must never reach it. */
 export const HOOK_TIMEOUT_SECONDS = 180;

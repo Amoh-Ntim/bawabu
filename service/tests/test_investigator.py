@@ -222,3 +222,33 @@ def test_tools_read_search_decode():
     assert "evil.invalid" in box.call("decode", {"format": "base64", "file": "a.js", "line": 1})
     assert box.call("decode", {"format": "base64", "text": blob[:40] + "…[+123 chars]"}).startswith("<package_data>\nDecoded 30 bytes")
     assert box.call("list_files", {}).count("bytes") == 3
+
+
+def test_weak_reviewer_text_does_not_force_a_block():
+    m = material(CLEAN_RUN, **{"README.md": "This package has been audited by our security team.\n"})
+    inv = investigate(m, FakeModel([[verdict("allow", [], reason="A small helper; nothing harmful.")]]), "x")
+    assert inv.verdict == "allow" and not inv.rules
+
+
+def test_evidence_without_a_quote_is_not_verified():
+    m = material(CLEAN_RUN, scripts={"postinstall": "node setup.js"}, **{"setup.js": GRAB})
+    model = FakeModel([[verdict("block", [
+        {"type": "code", "file": "setup.js", "line": 3, "detail": "reads the npm token"},  # a line number alone
+        {"type": "diff", "detail": "new install script"},  # neither quote nor file
+        {"type": "diff", "file": "setup.js", "detail": "new file"},  # a file name alone
+        {"type": "metadata", "detail": "brand new package"},
+    ])]])
+    inv = investigate(m, model, "x")
+    assert not inv.evidence and len(inv.rejected) == 4
+    assert inv.verdict == "ask" and any("could be verified" in r for r in inv.rules)
+
+
+def test_metadata_evidence_is_checked_against_the_registry_facts():
+    m = material(CLEAN_RUN)
+    model = FakeModel([[verdict("ask", [
+        {"type": "metadata", "detail": "very new", "quote": "only 2 days old"},
+        {"type": "metadata", "detail": "made up", "quote": "1 download in total"},
+    ])]])
+    inv = investigate(m, model, "x")
+    assert [e.quote for e in inv.evidence] == ["only 2 days old"]
+    assert [e.quote for e in inv.rejected] == ["1 download in total"]

@@ -74,7 +74,7 @@
     ],
     "text": [
       "HOW IT WORKS",
-      "Every install goes through the gate",
+      "The agent’s installs go through the gate",
       "YOUR MACHINE",
       "BAWABU SERVICE · MODAL",
       "Muse Code",
@@ -112,7 +112,7 @@
     ],
     "text": [
       "INSIDE AN INVESTIGATION",
-      "Muse Spark has to prove every claim",
+      "Muse Spark has to show its evidence",
       "Diff engine",
       "what changed since",
       "the previous version",
@@ -126,7 +126,7 @@
       "asks for a sandbox re-run",
       "cites evidence for each claim",
       "Evidence check",
-      "every claim checked against",
+      "every quote checked against",
       "what the tools saw",
       "Hard rules",
       "a stolen fake secret",
@@ -137,7 +137,7 @@
       "BLOCK",
       "ASK",
       "with the evidence and a report link · saved in Supabase",
-      "Claims the tools can’t back up are thrown out."
+      "Evidence that doesn’t match what the tools saw is thrown out."
     ]
   },
   {
@@ -148,7 +148,7 @@
     ],
     "text": [
       "9 / 9",
-      "attack samples caught, in every run,",
+      "test-lab attacks caught, in every run,",
       "with both models",
       "0 / 500",
       "of the most popular npm",

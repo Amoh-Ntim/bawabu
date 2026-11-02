@@ -128,7 +128,7 @@ def judge_manifest(manifest: Manifest) -> ManifestResult:
         ecosystem=manifest.ecosystem,
         manager=manifest.manager,
         verdict="allow",
-        reason="Whole-project installs aren't checked yet.",
+        reason="Its direct dependencies are checked one by one, like named packages; their own dependencies aren't.",
     )
 
 

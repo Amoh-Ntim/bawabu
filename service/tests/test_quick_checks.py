@@ -73,7 +73,8 @@ def test_red_flags_ask_with_reasons():
 
 def test_install_code_is_fine_for_a_popular_package_that_always_had_it():
     d = check(facts(install_scripts={"postinstall": "node install.js"}, previous_install_scripts={"postinstall": "node install.js"}))
-    assert d.verdict == "allow" and "same install code (postinstall)" in d.reason
+    # Only the command is compared, not the file it runs: say so.
+    assert d.verdict == "allow" and "same install command (postinstall)" in d.reason
     unpopular = check(facts(weekly_downloads=3_000, install_scripts={"install": "x"}, previous_install_scripts={"install": "x"}))
     assert unpopular.verdict == "ask" and "It runs code on install (install)." in unpopular.signals
 

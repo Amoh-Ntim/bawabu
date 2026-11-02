@@ -277,12 +277,12 @@ story += [
     Spacer(1, 14 * mm),
     table([
         ["What works today", ""],
-        ["The guard", "Stops every install a real Muse agent tries, including ones hidden in scripts and new MCP servers (Step 1)"],
+        ["The guard", "Stops the installs a real Muse agent tries, including ones hidden in scripts, whole-project installs and new MCP servers (Step 1)"],
         ["The office", "Runs in the cloud on Modal; most packages get an answer in under a second (Steps 2 and 3)"],
         ["The quick sorter", "Muse Spark Open, Meta's open model, clears harmless newcomers in seconds (Step 9)"],
         ["The sealed room", "Runs suspicious packages in a locked cloud computer with fake secrets, and watches (Step 5)"],
         ["The before-and-after check", "Compares each version with the one before and points at what changed (Step 6)"],
-        ["The detective", "Muse Spark reads the code, decodes hidden parts, re-tests in the sealed room, and must prove every claim (Steps 7 and 8)"],
+        ["The detective", "Muse Spark reads the code, decodes hidden parts, re-tests in the sealed room, and must quote evidence that Bawabu checks (Steps 7 and 8)"],
         ["The report page", "Anyone can watch an investigation live, with the evidence (Step 10)"],
         ["The exam", "9 of 9 practice attacks caught in every run; 0 of the 500 most popular npm packages wrongly blocked (Step 11)"],
         ["Try it yourself", "The whole thing runs on your own laptop with your own API key (Step 13)"],
@@ -717,7 +717,7 @@ story += [
     P("We ran every practice parcel through the real system with an empty notebook, so nothing was remembered, and then the "
       "500 most popular npm packages, to check that honest packages aren't blocked."),
     table([
-        ["Malicious practice parcels caught", "<b>9 of 9</b>, in every one of 7 runs, with either detective"],
+        ["Malicious practice parcels caught", "<b>9 of 9</b>, in every one of 9 runs, with either detective"],
         ["All practice parcels right", "<b>13 of 13</b> on the final version, with Muse Spark and with Muse Spark Open"],
         ["The 500 most popular npm packages", "<b>500 of 500 allowed</b>: no false alarms"],
         ["Time for a normal package", "<b>0.7 seconds</b> (typical)"],

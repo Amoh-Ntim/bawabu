@@ -145,12 +145,20 @@ _SECRETS = re.compile(
     r"""|\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|GITHUB_TOKEN|GH_TOKEN|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID)\b"""
     r"""|JSON\.stringify\(\s*process\.env\s*\)|Object\.(?:keys|entries)\(\s*process\.env\s*\)""",
 )
+# Text addressed to an AI reviewer, telling it what to decide: a hard rule blocks on this (investigator.apply_rules).
 _INJECTION = re.compile(
     r"(?:note|message|instructions?)\s+(?:to|for)\s+(?:the\s+|any\s+)?(?:automated|ai|llm|code|security)\s+(?:reviewer|scanner|auditor|assistant|agent)"
-    r"|ignore\s+(?:all\s+|any\s+)?(?:previous|prior|above|the)?\s*(?:instructions|install\s+scripts|warnings)"
+    r"|ignore\s+(?:all\s+|any\s+)?(?:previous|prior|above)\s+instructions"
+    r"|ignore\s+(?:the\s+|its\s+|any\s+|all\s+)?install\s+scripts"
     r"|(?:respond|reply|answer|output)\s+with\s+(?:the\s+)?(?:verdict|['\"]?allow)"
-    r"|do\s+not\s+(?:flag|report|block)\s+this"
-    r"|(?:this\s+(?:package|code|module))\s+(?:has\s+been|is|was)\s+(?:audited|approved|verified|whitelisted)"
+    r"|do\s+not\s+(?:flag|block)\s+this",
+    re.IGNORECASE,
+)
+# Weaker: also found in ordinary READMEs and in prompt templates of AI libraries. A red flag for the investigator to weigh,
+# never a block on its own.
+_REVIEWER_TEXT = re.compile(
+    r"(?:this\s+(?:package|code|module|library))\s+(?:has\s+been|is|was)\s+(?:audited|approved|verified|whitelisted)"
+    r"|ignore\s+(?:the\s+|any\s+|all\s+)?warnings"
     r"|you\s+are\s+an?\s+(?:ai|language\s+model|llm)",
     re.IGNORECASE,
 )
@@ -190,6 +198,8 @@ def scan_file(path: str, text: str, install_files: set[str]) -> list[Signal]:
     for lineno, line in enumerate(text.splitlines(), 1):
         if (m := _INJECTION.search(line)):
             add("prompt_injection", "high", "Text aimed at AI reviewers, telling them to approve the package", lineno, line, m)
+        elif (m := _REVIEWER_TEXT.search(line)):
+            add("reviewer_text", "medium", "Text that vouches for the package or addresses an AI (may be harmless)", lineno, line, m)
         if docs or _COMMENT.match(line):
             continue  # injection text lives in comments and READMEs; code signals only count in code
         if (m := _BASE64_BLOB.search(line)) and _entropy(m.group(0)[:400]) > 4.5:

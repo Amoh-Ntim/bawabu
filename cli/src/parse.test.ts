@@ -38,7 +38,6 @@ test("text that merely mentions an install is not an install", () => {
 test("npm installs", () => {
   assert.deepEqual(seen("npm install left-pad"), ["left-pad"]);
   assert.deepEqual(seen("npm i -D typescript@5.4 @types/node"), ["typescript@5.4", "@types/node"]);
-  assert.deepEqual(seen("npm install --registry https://r.example.com foo"), ["foo"]);
   assert.deepEqual(seen("npm --prefix ./web install axios"), ["axios"]);
   assert.deepEqual(seen("npm install 'left-pad'"), ["left-pad"]);
   assert.deepEqual(seen("npm install alias@npm:real-pkg@1.0.0"), ["real-pkg@1.0.0"]);
@@ -98,6 +97,89 @@ test("pip, uv and pipx", () => {
   assert.deepEqual(seen("pipx runpip myvenv install rich"), ["rich"]);
   assert.deepEqual(seen("pipx upgrade httpie"), ["httpie"]);
   assert.deepEqual(seen("pipx list"), []);
+});
+
+test("whole-project installs list the project's direct dependencies", () => {
+  const files = {
+    "/p/package.json": JSON.stringify({
+      dependencies: { react: "^18.2.0", ui: "workspace:*", lib: "file:../lib", alias: "npm:real-pkg@2" },
+      devDependencies: { typescript: "5.4.5", react: "^18.2.0" },
+      optionalDependencies: { fsevents: "~2.3.0" },
+      peerDependencies: { "react-dom": ">=18" },
+    }),
+    "/p/web/package.json": JSON.stringify({ dependencies: { axios: "1.7.0" } }),
+  };
+  const names = analyze("npm ci", ctx(files)).installs[0].packages.map((p) => `${p.source}:${p.name}@${p.version}`);
+  assert.deepEqual(names, [
+    "registry:react@^18.2.0", "path:workspace:*@", "path:../lib@", "registry:real-pkg@2",
+    "registry:typescript@5.4.5", "registry:react@^18.2.0", "registry:fsevents@~2.3.0", "registry:react-dom@>=18",
+  ]);
+  assert.deepEqual(seen("npm --prefix web install", files), ["axios@1.7.0"]);
+  assert.deepEqual(seen("cd web && yarn", files), ["axios@1.7.0"]);
+  assert.deepEqual(seen("pnpm install --dir web", files), ["axios@1.7.0"]);
+  assert.deepEqual(seen("npm install"), ["<manifest>"]); // no package.json: nothing to fetch
+  assert.ok(reasons("npm install", { "/p/package.json": JSON.stringify({ dependencies: { "bad name!": "1.0.0" } }) }).includes(REASONS.manifest));
+});
+
+test("pip requirement files are read, following includes", () => {
+  const files = {
+    "/p/requirements.txt": "# app\nrequests>=2.31  # http\n-r dev.txt\n--hash=sha256:abc\nrich\n",
+    "/p/dev.txt": "pytest==8.0.0\n",
+    "/p/other-index.txt": "--index-url https://mirror.example/simple\nflask\n",
+  };
+  assert.deepEqual(seen("pip install -r requirements.txt", files), ["requests@>=2.31", "pytest@==8.0.0", "rich"]);
+  assert.deepEqual(seen("uv pip install --requirement=requirements.txt", files), ["requests@>=2.31", "pytest@==8.0.0", "rich"]);
+  assert.ok(reasons("pip install -r other-index.txt", files).includes(REASONS.manifest));
+  assert.ok(reasons("pip install -r missing.txt", files).includes(REASONS.manifest));
+});
+
+test("uv run installs a script's inline dependencies", () => {
+  const files = {
+    "/p/tool.py": '# /// script\n# requires-python = ">=3.11"\n# dependencies = [\n#   "httpx<1",\n#   \'rich\',\n# ]\n# ///\nimport httpx\n',
+    "/p/plain.py": "print('hi')\n",
+  };
+  assert.deepEqual(seen("uv run tool.py", files), ["httpx@<1", "rich"]);
+  assert.deepEqual(seen("uv run --with pandas tool.py", files), ["pandas", "httpx@<1", "rich"]);
+  assert.deepEqual(seen("uv run plain.py", files), []);
+  assert.ok(reasons("uv run missing.py", files).includes(REASONS.missingScript));
+});
+
+test("installs that download from somewhere else than the project's registry are flagged", () => {
+  for (const cmd of [
+    "npm install --registry https://r.example.com foo",
+    "npm i foo --registry=https://r.example.com",
+    "npm i foo --userconfig ./other.npmrc",
+    "npm install --@corp:registry=https://r.example.com @corp/ui",
+    "yarn add foo --registry https://r.example.com",
+    "bun add foo --config ./bunfig.toml",
+    "npm_config_registry=https://r.example.com npm install foo",
+    "export NPM_CONFIG_REGISTRY=https://r.example.com; npm ci",
+    "pip install -i https://mirror.example/simple requests",
+    "pip install --extra-index-url https://mirror.example/simple requests",
+    "PIP_INDEX_URL=https://mirror.example/simple pip install requests",
+    "uv add --index corp=https://mirror.example/simple httpx",
+    "pipx install --pip-args='--index-url https://mirror.example/simple' black",
+  ]) {
+    assert.ok(reasons(cmd).includes(REASONS.source), cmd);
+  }
+  assert.deepEqual(seen("npm install --registry=https://registry.npmjs.org/ foo"), ["foo"]);
+  assert.deepEqual(seen("pip install --index-url https://pypi.org/simple requests"), ["requests"]);
+  assert.equal(unreadable("npm_config_registry=https://r.example.com npm run build"), false); // not an install
+});
+
+test("installs run from inside other programs are flagged; advice in a script isn't", () => {
+  const files = {
+    "/p/setup.js": "const { execSync } = require('child_process');\nexecSync('npm install evil-pkg');\n",
+    "/p/bootstrap.py": "import subprocess, sys\nsubprocess.run([sys.executable, '-m', 'pip', 'install', 'evil'])\n",
+    "/p/app.py": "try:\n    import rich\nexcept ImportError:\n    print('Run: pip install rich')\n",
+  };
+  assert.ok(reasons(`node -e "require('child_process').execSync('npm install evil')"`).includes(REASONS.inlineCode));
+  assert.ok(reasons(`python3 -c "import os; os.system('pip install evil')"`).includes(REASONS.inlineCode));
+  assert.ok(reasons("node setup.js", files).includes(REASONS.inlineCode));
+  assert.ok(reasons("python3 bootstrap.py", files).includes(REASONS.inlineCode));
+  assert.equal(unreadable("python3 app.py", files), false);
+  assert.equal(unreadable("node -e 'console.log(1)'"), false);
+  assert.equal(unreadable("python3 -m http.server"), false);
 });
 
 test("shell structure: chains, pipes, wrappers, redirections, substitutions", () => {

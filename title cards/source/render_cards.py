@@ -191,7 +191,7 @@ c.save()
 # 3b: the funnel, for "Normal packages pass in under a second. Suspicious ones get investigated."
 c = Card('card-3b-architecture')
 c.text('HOW IT WORKS', 140, 28, TEAL, True)
-c.text('Every install goes through the gate', 215, 60, bold=True)
+c.text('The agent’s installs go through the gate', 215, 60, bold=True)
 BW, TOP, BOTTOM = 280, 370, 590
 xs = [130, 460, 850, 1180, 1510]
 centers = [x + BW/2 for x in xs]
@@ -224,7 +224,7 @@ c.save()
 # 3c: inside an investigation (optional).
 c = Card('card-3c-investigation')
 c.text('INSIDE AN INVESTIGATION', 140, 28, TEAL, True)
-c.text('Muse Spark has to prove every claim', 215, 60, bold=True)
+c.text('Muse Spark has to show its evidence', 215, 60, bold=True)
 c.box(130, 300, 560, 470, TEAL, 'Diff engine', ['what changed since', 'the previous version'])
 c.box(130, 530, 560, 700, TEAL, 'Sandbox X-ray', ['locked Modal sandbox,', 'fake secrets planted'])
 c.rect(700, 300, 1220, 700, VIOLET)
@@ -232,7 +232,7 @@ c.text('Muse Spark', 378, 44, bold=True, cx=960)
 c.text('Meta Model API', 422, 24, VIOLET, True, cx=960)
 for i, line in enumerate(['reads the code', 'decodes what’s hidden', 'asks for a sandbox re-run', 'cites evidence for each claim']):
     c.text(line, 500 + i*50, 30, cx=960)
-c.box(1360, 300, 1790, 470, AMBER, 'Evidence check', ['every claim checked against', 'what the tools saw'])
+c.box(1360, 300, 1790, 470, AMBER, 'Evidence check', ['every quote checked against', 'what the tools saw'])
 c.box(1360, 530, 1790, 700, RED, 'Hard rules', ['a stolen fake secret', 'means block, always'])
 c.arrow([(560, 385), (700, 385)], GREY)
 c.arrow([(560, 590), (700, 590)], GREY)
@@ -247,12 +247,12 @@ x = 340
 for text, color, tint in [('ALLOW', GREEN, GREEN_BG), ('BLOCK', RED, RED_BG), ('ASK', AMBER, AMBER_BG)]:
     x += c.pill(text, 850, color, tint, x=x) + 16
 c.text('with the evidence and a report link · saved in Supabase', 862, 28, GREY, x=x+20)
-c.text('Claims the tools can’t back up are thrown out.', 975, 30, GREY)
+c.text('Evidence that doesn’t match what the tools saw is thrown out.', 975, 30, GREY)
 c.save()
 
 c = Card('card-4-results')
 for number, lines, baseline in [
-    ('9 / 9',['attack samples caught, in every run,','with both models'],350),
+    ('9 / 9',['test-lab attacks caught, in every run,','with both models'],350),
     ('0 / 500',['of the most popular npm','packages blocked'],565),
     ('0.7 s',['for a normal package'],780),
 ]:

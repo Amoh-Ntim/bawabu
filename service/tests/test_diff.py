@@ -181,3 +181,13 @@ def test_analyze_fetches_previous_version_and_rewrites_foreign_tarball_hosts():
     assert report.version == "2.0.0" and report.previous == "1.0.0"
     assert report.risk == "high"
     assert set(seen_auth) == {"Basic abc"}
+
+
+def test_text_that_merely_vouches_for_a_package_is_a_weak_signal_not_an_injection():
+    readme = "# util\nThis package has been audited by our security team.\nYou can safely ignore the warnings during install.\n"
+    prompts = 'const SYSTEM = "You are an AI assistant that summarises text.";\nmodule.exports = SYSTEM;\n'
+    files = {k: v.encode() for k, v in pkg("util", "1.0.0", **{"README.md": readme, "index.js": prompts}).items()}
+    report = diff.compare("util", "1.0.0", files)
+    assert not by_kind(report, "prompt_injection")
+    weak = by_kind(report, "reviewer_text")
+    assert weak and all(s.severity == "medium" for s in weak)

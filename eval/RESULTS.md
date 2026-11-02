@@ -8,8 +8,8 @@ Muse Spark. The cache starts empty, so nothing is replayed. Raw results are in [
 
 | | Result |
 |---|---|
-| **Malicious test-lab packages caught** | **9 / 9**, in every one of 7 runs (63 / 63), with either investigator |
-| **Test lab, overall** (9 malicious, 4 honest) | **13 / 13** on the final engine with Muse Spark (2 runs) and Muse Spark Open (1 run; also 13 / 13 in its run before the native-code fixes) |
+| **Malicious test-lab packages caught** | **9 / 9**, in every one of 9 runs (81 / 81), with either investigator |
+| **Test lab, overall** (9 malicious, 4 honest) | **13 / 13** on the final engine with Muse Spark (3 runs) and Muse Spark Open (2 runs; also 13 / 13 in its run before the native-code fixes), including both runs after the review fixes of 2 November |
 | **Top 500 npm packages** | **500 / 500 allowed: 0 false positives** |
 | **Time for a normal package** | **0.7 s** median, 1.6 s p95 (493 of the top 500 never needed more than the quick checks) |
 | **Time for a suspicious package** | 32–85 s with Muse Spark (up to 113 s with Muse Spark Open), including a locked-sandbox run of its install scripts |
@@ -49,6 +49,15 @@ returned (file, line and quote, or what the sandbox saw); unverifiable claims ar
 | 1213 | Muse Spark | 13 / 13 | 9 / 9 | 0 / 4 | 48.0 / 78.3 s | **final**: native sources readable, native builds in the sandbox |
 | 1216 | Muse Spark Open | 13 / 13 | 9 / 9 | 0 / 4 | 46.5 / 113.1 s | **final** |
 | 1220 | Muse Spark | 13 / 13 | 9 / 9 | 0 / 4 | 35.8 / 85.0 s | **final** |
+| 2 Nov 0946 | Muse Spark | 13 / 13 | 9 / 9 | 0 / 4 | 36.8 / 70.8 s | **after the review fixes**: quoted evidence required, narrower injection rule |
+| 2 Nov 0949 | Muse Spark Open | 13 / 13 | 9 / 9 | 0 / 4 | 35.5 / 64.8 s | **after the review fixes** |
+
+**2 November: re-run after an outside review.** The evidence check got stricter (code, diff and registry-fact claims
+need a verbatim quote that's found in what the tools returned; a line number or file name alone no longer counts), and
+the prompt-injection hard rule now fires only on text addressed to AI reviewers. Both investigators still scored
+13 / 13 and chose the same sandbox re-runs. Muse Spark quoted every claim (nothing discarded in 11 investigations);
+Muse Spark Open had 2 unquoted claims discarded (in `docs-gen-postinstall@2.0.0` and `image-resize-native`), without
+changing either verdict.
 
 **What the early false positive taught us.** The one miss was always the honest native-build package.
 

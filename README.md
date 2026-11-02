@@ -3,7 +3,7 @@
 **The gatekeeper between AI coding agents and the packages they install.**
 
 *Bawabu* is Swahili for *gatekeeper*. When an AI coding agent runs `npm install`, Bawabu stops the install, checks the
-package, and lets it in only if it's safe. Suspicious packages are run in a locked cloud sandbox baited with fake
+package, and lets it in only when it finds no evidence of harm. Suspicious packages are run in a locked cloud sandbox baited with fake
 secrets, and **Muse Spark investigates them like a security engineer would**: it reads the code, decodes what's
 hidden, and re-runs the sandbox under the conditions the malware is waiting for. Then it tells the agent what it
 found, with evidence that Bawabu checks before trusting.
@@ -14,7 +14,7 @@ Built for the **Meta Global AI Developer Hackathon** (Indie track, *Push the Fro
 
 | | |
 |---|---|
-| **Malicious test packages caught** | **9 / 9** in every one of 7 evaluation runs |
+| **Malicious packages caught in our test lab** | **9 / 9** in every one of 9 evaluation runs |
 | **Top 500 npm packages** | **500 / 500 allowed**: no false positives |
 | **Time for a normal package** | **0.7 s** median |
 | **Built on** | Muse Code · Muse Spark (Meta Model API) · Muse Spark Open (Meta's open weights) |
@@ -77,10 +77,15 @@ have noticed:
   commercial models used didn't exist, and **21.7%** for open-source models, with 205,474 unique made-up names
   ([Spracklen et al., USENIX Security 2025](https://arxiv.org/abs/2406.10279)). Attackers register those names and wait
   (*slopsquatting*).
-- Most defences are **blocklists**: they stop a package only after someone has reported it, which leaves the first
-  hours of an attack open, exactly when an agent might install it.
+- Defences exist: registries scan uploads, advisory databases list known malware, and install firewalls such as
+  [Socket Firewall](https://docs.socket.dev/docs/socket-firewall-overview) and
+  [Aikido Safe Chain](https://github.com/AikidoSec/safe-chain/) check packages as they're installed. But an agent
+  installs in seconds and acts on the answer by itself, so it needs more than a yes or no: what the package does, and
+  the proof.
 
-Bawabu doesn't wait for a report. It looks at what the package *does*.
+Bawabu's answer is an experiment. When a package looks suspicious, it runs it in a sealed sandbox, Muse Spark works
+out what the malware is waiting for (a CI server, a date), runs it again under those conditions, and the agent gets
+the verdict with the evidence.
 
 ---
 
@@ -126,15 +131,20 @@ Most packages never get past the first layer. Each layer only sees what the one 
 ### 1. The guard: a Muse Code hook
 
 `bawabu init` installs a `PreToolUse` hook in a project's `.muse/hooks.json`. Before every command the agent runs,
-Muse hands it to `bawabu check`, which reads the shell command the way a shell would and finds every install in it:
+Muse hands it to `bawabu check`, which reads the shell command the way a shell would and finds the installs in it:
 
 - **Package managers:** npm, npx, pnpm, pnpx, yarn, bun, bunx, pip, pip3, `python -m pip`, uv, uvx, pipx.
 - **Installs hidden one level down:** shell scripts (`bash setup.sh`, `./setup.sh`, `source`), heredocs piped into
   a shell, `package.json` scripts (with their `pre`/`post` scripts), and a project's own install scripts.
+- **Whole-project installs:** for `npm install`, `npm ci`, `yarn`, `pnpm install`, `pip install -r` and
+  `uv run script.py`, the direct dependencies in `package.json`, the requirement files or the script's inline metadata
+  are checked like named packages. So an agent can't slip a package in by adding it to `package.json` first.
 - **MCP servers:** an agent adding an MCP server to its settings also downloads and runs a package, so edits to MCP
   configs are checked too.
 - **Things it can't see into are blocked:** `curl … | sh`, package names from variables or `xargs`, git and URL
-  sources.
+  sources, package files (`.tgz`, `.whl`), installs that switch the download source (`--registry`, `--index-url`,
+  `npm_config_registry=…`), and installs run from inside other programs (`node -e`, `python -c`, a script calling
+  `execSync("npm install …")`).
 
 Only package names, versions and the registry's address leave the laptop. Never the command line, code or files.
 
@@ -248,8 +258,9 @@ be blocked.
 | `image-resize-native` | honest: compiles native code (sharp-style) | ✅ allowed |
 | `pretty-log-kit` | honest: heavy but harmless install script | ✅ allowed |
 
-- **9 / 9 malicious packages caught in every one of 7 runs**, with both investigators.
-- **13 / 13** on the final engine with Muse Spark (2 runs) and Muse Spark Open.
+- **9 / 9 malicious packages caught in every one of 9 runs** of our test lab, with both investigators.
+- **13 / 13** on the final engine with Muse Spark (3 runs) and Muse Spark Open (2 runs), including a re-run of both
+  after the review fixes of 2 November (every claim must quote what the tools saw).
 - Early runs had one false positive, and fixing it improved Bawabu: Spark couldn't read the native package's C++ source
   and its addon couldn't compile in the sandbox. Both are fixed; the details are in [eval/RESULTS.md](eval/RESULTS.md).
 
@@ -415,8 +426,8 @@ practice packages: `uv run modal deploy testlab/modal_verdaccio.py`, then `./tes
 
 ```bash
 uv sync                          # Python 3.13: service, sandbox, evaluation
-uv run pytest                    # 129 tests
-cd cli && npm test               # 66 tests
+uv run pytest                    # 140 tests
+cd cli && npm test               # 74 tests
 ```
 
 Tools for looking at one package from your machine (most need `.env`; see [`.env.example`](.env.example)):
@@ -460,24 +471,41 @@ results.md     The lab notebook: every test, result and decision, newest first
 
 Being clear about what Bawabu doesn't do yet:
 
-- **Whole-project installs** (`npm install` or `npm ci` with no package names, `pip install -r`) are let through. The
-  project's own install scripts are checked, but its dependency list isn't.
+- **What the hook can see.** It reads the shell commands the agent runs and the scripts they call, so it protects a
+  well-meaning agent from bad packages; it isn't a sandbox around a hostile one. Code that fetches and unpacks a package
+  without a package manager (for example from inside a Node program it wrote) can get past it.
+- **Whole-project installs** check the direct dependencies only: their own dependencies (the rest of the lockfile)
+  aren't checked one by one, and neither are workspace packages' dependency lists. `uv sync` and `pipx install-all`
+  aren't read yet and are let through.
 - **PyPI** packages get the quick checks only (existence, known malware, typos, age). The sandbox, diff and
   investigator are npm-only, so a suspicious PyPI package gets "ask".
 - **Dependencies:** the sandbox runs a package's whole dependency tree, and the screener won't clear a package whose
   direct dependencies aren't established. But a malicious package deep inside an *established* package's tree isn't
   investigated on its own.
-- **Malware that notices the sandbox**, or waits longer than a run, can stay quiet. The diff and Spark's code reading
-  are the backstop, not a guarantee.
-- The registry comes from `.npmrc`; a `--registry` flag typed on the command itself isn't followed yet.
+- **Quick checks compare install commands, not install files.** An established package whose install command hasn't
+  changed (`node install.js`) is cleared without reading the file it runs, so a hijacked release that swaps the file
+  but keeps the command and the publisher would pass the quick checks.
+- **Evidence checks confirm citations, not conclusions.** Each quote must really appear in what the tools returned
+  (the file, the decoded text, the diff, the registry facts or the sandbox report), or the claim is discarded. What it
+  *means* is Spark's judgement; that's why the hard rules (a fake secret leaving the sandbox, text telling AI
+  reviewers to approve) don't depend on it.
+- **Coverage:** files over 1 MiB are hashed, not read; an `allow` means no evidence of harm was found, not that every
+  file was read.
+- **Malware that notices the sandbox**, or waits longer than a run, can stay quiet. The fake secrets are fixed strings
+  (they're in this repo), so malware written against Bawabu could recognise them. The diff and Spark's code reading are
+  the backstop, not a guarantee.
+- **Download sources:** the registry comes from `.npmrc` in the folder the agent works in. Installs that switch it
+  (`--registry`, index URLs, `npm_config_registry=…`) are blocked rather than followed.
 - The first check of a suspicious package takes about a minute, so the agent may be asked to retry once.
-- The hosted service has no accounts or rate limits, and report links are public (code is hidden for private
-  registries).
+- **The hosted service** has no accounts or rate limits, and report links are public. For private registries, code
+  excerpts are hidden, but Spark's own words and steps aren't, so don't send private code to the hosted service: run
+  your own (see above).
 - Built and tested with Muse Code. Other agents aren't supported yet.
 - **Our practice packages explain themselves.** Each sample starts with a comment describing its trick, part of labelling
   it clearly as a harmless test fixture. Real malware never does that. Spark's verdicts cite code lines (the token read,
   the POST, the CI gate), but the comments may still make the samples easier than real attacks; a variant of the test
-  lab without them would be a stricter test.
+  lab without them would be a stricter test. The top-500 run mostly tests the quick checks (only seven packages reached
+  the investigator), so it shows Bawabu doesn't get in the way of popular packages, not a general false-positive rate.
 
 ---
 

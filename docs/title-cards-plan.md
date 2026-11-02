@@ -132,7 +132,7 @@ It matches the voiceover: *"Normal packages pass in under a second. Suspicious o
 | Position | Text | Style |
 |---|---|---|
 | Top | HOW IT WORKS | Small, teal |
-| Below | Every install goes through the gate | Big, white |
+| Below | The agent’s installs go through the gate | Big, white |
 | Centre | Five boxes left to right, in two panels: **Your machine** (Muse Code: *npm install x* → Bawabu hook: *name + version*) and **Bawabu service · Modal** (Quick checks: *about 1 s* → Screener, Muse Spark Open: *a few seconds* → Investigation, locked sandbox + Muse Spark: *30–90 s*) | Box titles white, outlines teal / violet / red |
 | Under the boxes | What each stage can answer: *allow · block*, *allow*, *allow · block · ask*, joined by one line back to the hook: "the answer goes back to the agent, with the evidence and a report link" | Pills in the box colours |
 | Bottom | Most packages are cleared by the quick checks. Only red flags go further. | Small, grey |
@@ -144,12 +144,12 @@ Use it only if there's time: about 4 seconds at the start of 1:57 "Under the hoo
 | Position | Text | Style |
 |---|---|---|
 | Top | INSIDE AN INVESTIGATION | Small, teal |
-| Below | Muse Spark has to prove every claim | Big, white |
+| Below | Muse Spark has to show its evidence | Big, white |
 | Left | Diff engine (*what changed since the previous version*) and Sandbox X-ray (*locked Modal sandbox, fake secrets planted*) feed Muse Spark; an amber *re-run* arrow goes back to the sandbox | Teal outlines |
 | Centre | Muse Spark · Meta Model API: reads the code, decodes what's hidden, asks for a sandbox re-run, cites evidence for each claim | Violet outline |
-| Right | Evidence check (*every claim checked against what the tools saw*) → Hard rules (*a stolen fake secret means block, always*) | Amber, red outlines |
+| Right | Evidence check (*every quote checked against what the tools saw*) → Hard rules (*a stolen fake secret means block, always*) | Amber, red outlines |
 | Bottom bar | Verdict: ALLOW · BLOCK · ASK, with the evidence and a report link · saved in Supabase | Green / red / amber pills |
-| Bottom | Claims the tools can't back up are thrown out. | Small, grey |
+| Bottom | Evidence that doesn't match what the tools saw is thrown out. | Small, grey |
 
 Both architecture cards are drawn by `title cards/source/render_cards.py` (dark, and `--theme light`), so they match
 the other cards exactly.
@@ -160,7 +160,7 @@ Three rows, left-aligned in the centre of the card, each with a big teal number 
 
 | Number | Line |
 |---|---|
-| 9 / 9 | attack samples caught, in every run, with both models |
+| 9 / 9 | test-lab attacks caught, in every run, with both models |
 | 0 / 500 | of the most popular npm packages blocked |
 | 0.7 s | for a normal package |
 

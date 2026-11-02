@@ -40,7 +40,7 @@ existed before the event is reproduced from the supplied plan.
 
 - Cards 2a and 2c: [Google Threat Intelligence](https://cloud.google.com/blog/topics/threat-intelligence/mitigation-guidance-for-supply-chain-compromise), including the cited OpenSSF data.
 - Card 2b: [Cloud Security Alliance](https://labs.cloudsecurityalliance.org/research/csa-research-note-shai-hulud-ai-supply-chain-20260517-csa-st/), 169 npm packages plus two PyPI packages.
-- Card 4: `eval/RESULTS.md`, nine attack samples in seven runs, 500/500 popular packages allowed, and 0.7-second median.
+- Card 4: `eval/RESULTS.md`, nine test-lab attacks in nine runs, 500/500 popular packages allowed, and 0.7-second median.
 
 ## Re-render
 

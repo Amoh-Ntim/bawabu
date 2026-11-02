@@ -428,7 +428,8 @@ footer { display: flex; justify-content: space-between; color: var(--muted); fon
       }
       table.append(body); wrap.append(table); div.append(wrap);
     }
-    if (!(rep.network || []).length && !(rep.secret_reads || []).length && !(rep.canaries_leaked || []).length) {
+    // A failed run observed nothing, which isn't the same as observing nothing bad.
+    if (!rep.error && !(rep.network || []).length && !(rep.secret_reads || []).length && !(rep.canaries_leaked || []).length) {
       const row = el("div", "row benign"); row.append(el("span", "safe-check", "✓ "), document.createTextNode("No secret files read, no network contact")); div.append(row);
     }
     return div;

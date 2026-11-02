@@ -98,7 +98,8 @@ of malice: report it as evidence.
 2. Base your verdict on evidence from the tools. Cite it exactly: for code, give the file, the line number \
 and a short quote copied verbatim from read_file output; for hidden code you decoded, use type "decoded" and \
 quote the decoded text verbatim from the decode output; for the sandbox, quote the host, path or secret name \
-exactly as the sandbox report shows it. Evidence you can't cite will be discarded.
+exactly as the sandbox report shows it; for the diff or registry facts, quote the line or fact verbatim from \
+get_diff or get_metadata. Evidence without a verbatim quote will be discarded.
 3. A network request on install is not guilt on its own: many legitimate packages download prebuilt \
 binaries from their registry or GitHub. Reading credentials (npm tokens, SSH keys, cloud keys, .env) and \
 sending them anywhere is malicious. Hidden code (encoded blobs that are decoded and executed) needs decoding \
@@ -149,7 +150,8 @@ TOOLS = [
             "detail": {"type": "string"},
             "file": {"type": "string"},
             "line": {"type": "integer"},
-            "quote": {"type": "string", "description": "verbatim from read_file or the sandbox report"},
+            "quote": {"type": "string", "description": "verbatim from the tool output it cites (read_file, decode, get_diff, "
+                                                         "get_metadata or the sandbox report); evidence without one is discarded"},
         }, "required": ["type", "detail"]}},
         "safe_alternative": {"type": "string", "description": "a well-known package that does the same job, if any"},
     }, ["verdict", "confidence", "reason", "evidence"]),
@@ -324,13 +326,13 @@ def verify(e: Evidence, box: Toolbox) -> Evidence:
         lines = text.splitlines()
         if e.line is not None and not 1 <= e.line <= len(lines):
             return reject(f"{e.file} has {len(lines)} lines, not {e.line}")
-        if e.quote:
-            q = _norm(e.quote)
-            window = lines[max(0, (e.line or 1) - 3): (e.line or len(lines)) + 2] if e.line else lines
-            if not q or not any(q in _norm(line) for line in window):
-                return reject(f"quote not found {'near line ' + str(e.line) if e.line else 'in'} {e.file}")
-        elif e.line is None:
-            return reject("code evidence needs a line or a quote")
+        # A line number alone proves nothing about what's on it: the quote is what gets checked.
+        q = _norm(e.quote or "")
+        if not q:
+            return reject("code evidence needs a quote copied from the file")
+        window = lines[max(0, (e.line or 1) - 3): (e.line or len(lines)) + 2] if e.line else lines
+        if not any(q in _norm(line) for line in window):
+            return reject(f"quote not found {'near line ' + str(e.line) if e.line else 'in'} {e.file}")
     elif e.type == "sandbox":
         # ensure_ascii=False: the model quotes "→" as it saw it, not as \u2192.
         corpus = _norm(json.dumps([box.m.sandbox or {}] + box.reruns, default=str, ensure_ascii=False))
@@ -341,13 +343,19 @@ def verify(e: Evidence, box: Toolbox) -> Evidence:
         d = box.m.diff
         corpus = "" if d is None else "\n".join([s.cite() for s in d.signals] + list(d.diffs.values()))
         probe = _norm(e.quote or "")
-        if not d or (probe and probe not in _norm(corpus)) or (not probe and e.file and e.file not in corpus):
+        if not probe:
+            return reject("diff evidence needs a quote copied from get_diff")
+        if probe not in _norm(corpus):
             return reject("not found in the diff")
     elif e.type == "decoded":
         probe = _norm(e.quote or "")
         if not probe or not any(probe in _norm(text) for text in box.decoded):
             return reject("quote not found in anything the decode tool returned")
-    elif e.type != "metadata":
+    elif e.type == "metadata":
+        probe = _norm(e.quote or "")
+        if not probe or probe not in _norm(json.dumps(box.m.metadata, default=str, ensure_ascii=False)):
+            return reject("not found in the registry facts")
+    else:
         return reject(f"unknown evidence type {e.type!r}")
     e.verified = True
     return e

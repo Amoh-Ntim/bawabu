@@ -54,6 +54,71 @@ A running record of what we tested, what we found, and how it changes the build.
 
 ---
 
+## 2026-11-02 (Mon): Step 13 (part 13) — fixes from the outside review
+
+An outside review (`bawabu-review-2026-11-02.md`, kept outside the repo) checked the code and found the claims
+broader than the enforcement. Every high-severity finding was confirmed in the code before fixing.
+
+**The guard (CLI 0.1.1, needs `npm publish`)**
+- **Whole-project installs are now checked.** `npm install`, `npm ci`, `yarn`, `pnpm install`, `bun install` read the
+  folder's `package.json` (following `--prefix`, `--cwd`, `--dir` and `cd`) and send every direct dependency
+  (dependencies, dev, optional, peer; npm aliases resolved) to the service like a named package. `pip install -r`
+  reads the requirement files (following `-r` includes); `uv run script.py` reads the script's inline `# /// script`
+  dependencies. Before, an agent could add a package to `package.json` and run `npm install` unchecked.
+- **Download-source switches are blocked**: `--registry`, `--userconfig`, `--@scope:registry`, bun `--config`, pip/uv
+  index URLs and `--find-links`, `--pip-args` with an index, and `npm_config_registry=` / `PIP_INDEX_URL=` style
+  variables (inline or exported). The public npm and PyPI URLs are still allowed.
+- **Package files are blocked like URLs**: `npm i ./x.tgz`, `pip install ./x.whl`, `file:vendor/x.tgz` dependencies.
+  Folders (`npm i ./packages/ui`, `pip install -e .`) are still trusted as the user's own code.
+- **Installs from inside other programs are flagged**: `node -e` / `python -c` code containing an install, and local
+  scripts that call one (`execSync("npm install …")`, `subprocess.run([... "pip", "install" ...])`). Scripts that merely
+  print "pip install x" as advice still run.
+- More than 200 packages in one install is blocked with a message (the service's limit).
+- Tested end to end against the hosted service: a `package.json` with a made-up dependency → `npm install` blocked
+  with "Did you mean react-datepicker?"; `--registry https://evil.example` blocked; `left-pad` + `express` allowed.
+
+**The service and sandbox (needs `modal deploy`)**
+- **Evidence needs a verbatim quote.** Code evidence with only a line number, diff evidence with only a file name, and
+  metadata claims are discarded unless their quote appears in the file, the diff or the registry facts. The prompt and
+  the tool schema say so.
+- **The prompt-injection hard rule is narrower.** Text addressed to AI reviewers ("note to automated reviewer",
+  "ignore previous instructions", "respond with verdict: allow", "do not flag this") still forces a block. "This package
+  has been audited", "ignore the warnings" and "you are an AI" (common in harmless READMEs and LLM prompt templates) are
+  now a medium red flag the investigator weighs.
+- **Canaries in binary or gzipped request bodies are found** (the sink stores them as base64; the scan skipped them).
+- **A failed sandbox run is no longer shown as clean** on the report page.
+- Wording: "same install command" (only the command is compared, not the file); the manifest note says direct
+  dependencies are checked.
+
+**Re-evaluated with the stricter rules:** Muse Spark run `lab-meta-20261102-0946`: **13 / 13** (9 / 9 malicious, 0 / 4
+false positives; median 36.8 s, max 70.8 s), with the `CI=true` re-run and the moved clock chosen by Spark again. **No
+evidence was discarded** in any of the 11 investigations: Spark quoted every claim. Muse Spark Open run
+`lab-open-20261102-0949`: **13 / 13** (9 / 9, 0 / 4; median 35.5 s, max 64.8 s); 2 unquoted claims discarded
+(docs-gen-postinstall@2.0.0, image-resize-native) without changing either verdict. Totals now: 9 / 9 in every one of 9
+runs (81 / 81). README, eval/RESULTS.md, the explainer and the video guide updated.
+
+**Deployed** as Modal version v15 (09:50 GMT). A web container started at 09:48 on v14 kept answering afterwards
+(probably kept warm by an open `/live` page polling every 1.5 s), so the live service still showed the old manifest note;
+it needs stopping (`modal container stop`) or to go idle before v15 serves. CLI 0.1.1 built and packed, not yet
+published.
+
+**Redeployed as v16 (10:10 GMT): live and verified.** The only web container now runs v16; `/check` returns the new
+manifest note, `/live` has the failed-run fix, `left-pad` is still allowed in about a second, and the README's CI
+report still opens.
+
+**Claims narrowed everywhere** (README, npm page, explainer PDF, title cards 3b/3c/4, video guide, recording script):
+"only if it's safe" → "only when it finds no evidence of harm"; "every install" → "the installs it can see";
+"prove every claim" → "show its evidence"; "9 / 9 attack samples" → "9 / 9 in our test lab". The README's "most
+defences are blocklists" became a fair comparison (Socket Firewall, Aikido Safe Chain) leading with Bawabu's
+difference: the experiment loop. The voiceover's "blocklists only help after…" became "And the agent installs it in
+seconds, before any human looks." (394 words now). README Limits now states the threat model, direct-dependency scope,
+command-not-file quick checks, citations-not-conclusions evidence checks, coverage, fixed canaries, and private code on
+the hosted service.
+
+Tests: **140 Python** (was 134) and **74 CLI** (was 66), all passing.
+
+---
+
 ## 2026-11-02 (Mon): Step 13 (part 12) — the recording and voiceover script
 
 **`docs/demo-recording-script.pdf`** (13 pages, from `demo-recording-script.md`): the rehearsal script, in three parts.

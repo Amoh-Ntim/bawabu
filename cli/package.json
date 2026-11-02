@@ -1,6 +1,6 @@
 {
   "name": "bawabu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A gatekeeper between AI coding agents and the packages they install.",
   "keywords": [
     "security",

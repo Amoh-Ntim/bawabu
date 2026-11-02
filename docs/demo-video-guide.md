@@ -49,7 +49,7 @@ else supports that moment.
 | 2:21–2:37 | Results | Numbers card | ~30 words |
 | 2:37–2:50 | Try it, close | `npm i -g bawabu`, GitHub, end card | ~35 words |
 
-About 390 words in total. At a calm pace (140–150 words a minute) that's 2:36–2:47, which leaves a few seconds for the silent beats in the demo.
+About 394 words in total. At a calm pace (140–150 words a minute) that's 2:38–2:49, which leaves a few seconds for the silent beats in the demo.
 
 ---
 
@@ -142,15 +142,14 @@ text (captions or labels you add while editing).
 **Say:**
 > Malicious open-source packages rose by more than fourteen hundred percent from 2024 to 2025. In May, the Mini
 > Shai-Hulud worm compromised a hundred and seventy-one npm and PyPI packages. Google has already seen an AI agent add a
-> malicious package to a real project. And blocklists only help after someone has reported the attack.
+> malicious package to a real project. And the agent installs it in seconds, before any human looks.
 
 ### 0:37–0:47 · Bawabu in one line
 
-**On screen:** title card 3 *"Bawabu: the gatekeeper"* (about 4 s), then architecture card 3b *"Every install goes
-through the gate"* (about 6 s), in `title cards/` (or `title cards/light mode/`).
+**On screen:** title card 3 *"Bawabu: the gatekeeper"* (about 4 s), then architecture card 3b *"The agent’s installs go through the gate"* (about 6 s), in `title cards/` (or `title cards/light mode/`).
 
 **Say:**
-> This is Bawabu, Swahili for "gatekeeper". It sits between Muse Code and every package it installs. Normal packages
+> This is Bawabu, Swahili for "gatekeeper". It sits between Muse Code and the packages it installs. Normal packages
 > pass in under a second. Suspicious ones get investigated.
 
 ### 0:47–1:57 · The live demo (split screen)
@@ -180,7 +179,7 @@ on the right.
 ### 1:57–2:21 · Under the hood
 
 **On screen:** four quick cuts, about six seconds each (shots B1, B3, B4 and B5 in section 6). Optional: open with
-card 3c *"Muse Spark has to prove every claim"* for about 4 s and trim the cuts to match.
+card 3c *"Muse Spark has to show its evidence"* for about 4 s and trim the cuts to match.
 
 **Say:**
 > Under the hood, it's a funnel. Quick checks clear most packages instantly and catch made-up names. Muse Spark
@@ -198,12 +197,12 @@ Match each sentence to a cut:
 ### 2:21–2:37 · Results
 
 **On screen:** a clean numbers card.
-- *"9 / 9 attack samples caught, in every run, with both models"*
+- *"9 / 9 test-lab attacks caught, in every run, with both models"*
 - *"0 of the 500 most popular npm packages blocked"*
 - *"0.7 seconds for a normal package"*
 
 **Say:**
-> We tested it. It caught nine out of nine attack samples in every run, with both models. And it blocked none of
+> We tested it. It caught nine out of nine attacks in our test lab, in every run, with both models. And it blocked none of
 > the five hundred most popular npm packages.
 
 ### 2:37–2:50 · Try it, close
@@ -284,7 +283,7 @@ Short clips for the cutaways. Record each for a few seconds longer than you need
 | "more than fourteen hundred percent from 2024 to 2025" (exactly 1,444%) | OpenSSF data, cited by Google Threat Intelligence: https://cloud.google.com/blog/topics/threat-intelligence/mitigation-guidance-for-supply-chain-compromise |
 | "Google has already seen an AI agent add a malicious package to a real project" | Same Google report |
 | "Mini Shai-Hulud … a hundred and seventy-one npm and PyPI packages" | Cloud Security Alliance: https://labs.cloudsecurityalliance.org/research/csa-research-note-shai-hulud-ai-supply-chain-20260517-csa-st/ |
-| "nine out of nine … in every run, with both models" | `eval/RESULTS.md`: 7 test-lab runs, 9/9 every time, Muse Spark and Muse Spark Open |
+| "nine out of nine attacks in our test lab, in every run, with both models" | `eval/RESULTS.md`: 9 test-lab runs, 9/9 every time, Muse Spark and Muse Spark Open |
 | "none of the five hundred most popular npm packages" | `eval/RESULTS.md`: top 500, 500/500 allowed |
 | "under a second" | `eval/RESULTS.md`: 0.7 s median for the top 500 |
 
@@ -300,12 +299,12 @@ browser window. Add the link to the README (the "Demo video" line near the top).
 - **Name:** Bawabu
 - **One line:** The gatekeeper between AI coding agents and the packages they install.
 - **Description:** AI coding agents install packages on their own, and attackers have noticed. Bawabu hooks into Muse
-  Code and checks every install before it happens. Normal packages pass in under a second. Suspicious ones run in a
+  Code and checks installs before they happen. Normal packages pass in under a second. Suspicious ones run in a
   locked cloud sandbox with fake secrets, and Muse Spark investigates like a security engineer: it reads the code,
   decodes hidden payloads, and re-runs the sandbox under the conditions malware waits for, such as a CI server or a
-  future date. Every piece of evidence is checked before it's trusted, and hard rules override the model. Muse Spark
+  future date. Every claim has to quote what the tools saw, and is checked before it's trusted; hard rules override the model. Muse Spark
   Open, Meta's open-weights model, screens newcomers in seconds and can run the whole investigation. In our evaluation
-  it caught 9 of 9 attack samples in every run and blocked none of the 500 most popular npm packages. It's on npm
+  it caught 9 of 9 attacks in our test lab in every run and blocked none of the 500 most popular npm packages. It's on npm
   (`npm i -g bawabu`), and anyone can run it on their own laptop with their own Meta API key.
 - **Meta models used:** Muse Code (integration through its hook), Muse Spark on the Meta Model API (the investigator),
   Muse Spark Open on Baseten (the screener, and the investigator in open-weights mode).
@@ -315,7 +314,7 @@ browser window. Add the link to the README (the "Demo video" line near the top).
 **X post** (attach a 30–45 second cut of the live demo: from "the first run looks clean" to "Blocked"):
 > AI coding agents install packages on their own. Who checks them?
 >
-> Bawabu stops every install. Suspicious packages run in a locked sandbox with fake secrets, and Meta's Muse Spark
+> Bawabu stops installs and checks them first. Suspicious packages run in a locked sandbox with fake secrets, and Meta's Muse Spark
 > investigates. Here it re-runs malware as a CI server to make it show itself.
 >
 > npm i -g bawabu
@@ -334,9 +333,9 @@ Viral prize counts until 8 November.
 >
 > Malicious open-source packages rose by more than fourteen hundred percent from 2024 to 2025. In May, the Mini
 > Shai-Hulud worm compromised a hundred and seventy-one npm and PyPI packages. Google has already seen an AI agent add a
-> malicious package to a real project. And blocklists only help after someone has reported the attack.
+> malicious package to a real project. And the agent installs it in seconds, before any human looks.
 >
-> This is Bawabu, Swahili for "gatekeeper". It sits between Muse Code and every package it installs. Normal packages
+> This is Bawabu, Swahili for "gatekeeper". It sits between Muse Code and the packages it installs. Normal packages
 > pass in under a second. Suspicious ones get investigated.
 >
 > I ask Muse Code to add a build-cache helper for our CI. It's one of our harmless test packages. The agent runs npm install, and Bawabu stops it before anything reaches my machine.
@@ -355,7 +354,7 @@ Viral prize counts until 8 November.
 > evidence, never instructions: a note telling AI reviewers to approve a package counts against it. And hard rules
 > always beat the model.
 >
-> We tested it. It caught nine out of nine attack samples in every run, with both models. And it blocked none of
+> We tested it. It caught nine out of nine attacks in our test lab, in every run, with both models. And it blocked none of
 > the five hundred most popular npm packages.
 >
 > Bawabu is open source and on npm today: one install, one command. Or run it on your own laptop with your own Meta

