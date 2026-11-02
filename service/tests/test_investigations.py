@@ -14,6 +14,29 @@ from bawabu_service.cache import MemoryCache
 from bawabu_service.investigations import Investigations, MemoryStore
 from bawabu_service.registry import Source
 
+
+def test_diff_summary_preserves_headlines_and_adds_matching_severity_items():
+    from bawabu_service.diff import DiffReport, Signal
+
+    report = DiffReport("example", "2.0.0", "1.0.0", signals=[
+        Signal("old", "high", "Existing network call", "old.js", 4, new=False),
+        Signal("new", "low", "New dependency", "package.json"),
+        Signal("new", "high", "Reads and sends a secret", "setup.js", 3),
+        Signal("new", "medium", "New install script", "package.json"),
+    ])
+    summary = investigations.diff_summary(report)
+    assert summary["signals"] == report.headline(10)
+    assert [s["text"] for s in summary["signal_items"]] == summary["signals"]
+    assert [s["severity"] for s in summary["signal_items"]] == ["high", "medium", "low", "high"]
+    assert [s["new"] for s in summary["signal_items"]] == [True, True, True, False]
+    assert "also in the previous version" in summary["signal_items"][-1]["text"]
+    report.previous = None
+    assert all(s["new"] for s in investigations.diff_summary(report)["signal_items"])
+    report.signals *= 4
+    assert len(investigations.diff_summary(report)["signal_items"]) == 10
+    report.signals.clear()
+    assert investigations.diff_summary(report)["signal_items"] == []
+
 LAB = "https://lab.example"
 LAB_SOURCES = {LAB: Source(LAB, (("authorization", "Basic bGFiOnB3"),))}
 BLOCK_RESULT = {

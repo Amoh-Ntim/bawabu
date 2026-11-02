@@ -9,9 +9,10 @@ import secrets
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from . import __version__
+from .brand import MASCOT_PNG
 from .cache import Cache, cache_from_env
 from .investigations import Investigations, Store
 from .models import CheckRequest, CheckResponse
@@ -42,11 +43,13 @@ def redact(result: dict | None, events: list[dict]) -> tuple[dict | None, list[d
 
 
 def page_response() -> HTMLResponse:
-    """The report page with a fresh nonce: only its own script may run, and it may only talk to this service."""
+    """The report page with a fresh nonce: only its own script may run, and it may only talk to this service
+    (and load the mascot from it)."""
     nonce = secrets.token_urlsafe(16)
     return HTMLResponse(PAGE.replace("__NONCE__", nonce), headers={
         "Content-Security-Policy": f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'unsafe-inline'; "
-                                   "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+                                   "img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; "
+                                   "frame-ancestors 'none'",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
         "Cache-Control": "no-store",
@@ -103,6 +106,11 @@ def create_app(cache: Cache | None = None, client: httpx.AsyncClient | None = No
     @app.get("/live", response_class=HTMLResponse, include_in_schema=False)
     async def live() -> HTMLResponse:
         return page_response()
+
+    @app.get("/mascot.png", include_in_schema=False)
+    async def mascot() -> Response:
+        return Response(MASCOT_PNG, media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"})
 
     @app.post("/check")
     async def check(request: CheckRequest) -> CheckResponse:

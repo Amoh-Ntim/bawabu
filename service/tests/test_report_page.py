@@ -52,12 +52,65 @@ def test_report_page_is_served_with_a_strict_policy_and_a_matching_nonce():
         nonce = re.search(r"'nonce-([^']+)'", csp).group(1)
         assert f'<script nonce="{nonce}">' in r.text and "__NONCE__" not in r.text
         assert "default-src 'none'" in csp and "connect-src 'self'" in csp and "frame-ancestors 'none'" in csp
+        assert "img-src 'self'" in csp
         assert r.headers["x-content-type-options"] == "nosniff"
     assert client.get("/r/a").headers["content-security-policy"] != client.get("/r/a").headers["content-security-policy"]
 
 
+def test_mascot_is_served_by_the_service():
+    client, _ = service()
+    r = client.get("/mascot.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    assert r.content.startswith(b"\x89PNG") and r.headers["x-content-type-options"] == "nosniff"
+
+
 def test_page_never_inserts_package_text_as_html():
     assert "innerHTML" not in report_page.PAGE and "insertAdjacentHTML" not in report_page.PAGE and "document.write" not in report_page.PAGE
+
+
+def test_report_has_no_external_assets_and_all_scripts_use_the_nonce():
+    page = report_page.PAGE
+    # The only thing it loads is the mascot, from this service.
+    assert re.findall(r'<(?:script|img|link|iframe)\b[^>]*?(?:src|href)\s*=\s*"([^"]*)"', page, re.I) == ["/mascot.png"] * 2
+    assert "@import" not in page and "url(" not in page
+    assert re.findall(r"<script[^>]*>", page) == ['<script nonce="__NONCE__">'] * 2
+    assert page.index('localStorage.getItem("bawabu-theme")') < page.index("<style>")
+
+
+def test_both_themes_define_all_colors_with_accessible_contrast():
+    page = report_page.PAGE
+    themes = [re.search(r':root\[data-theme="' + theme + r'"\]\s*\{([^}]+)\}', page).group(1)
+              for theme in ("light", "dark")]
+    colors = [dict(re.findall(r"--([\w-]+):\s*(#[0-9A-Fa-f]{6})", theme)) for theme in themes]
+    tokens = [set(re.findall(r"--([\w-]+):", theme)) - {"mono"} for theme in themes]
+    assert tokens[0] == tokens[1]
+    used = set(re.findall(r"var\(--([\w-]+)", page)) - {"mono", "shadow", "tone", "tint", "progress", "ring-tone"}
+    assert used <= tokens[0]
+
+    def luminance(color):
+        channels = [int(color[i:i+2], 16) / 255 for i in (1, 3, 5)]
+        return sum(weight * (c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4)
+                   for c, weight in zip(channels, (.2126, .7152, .0722)))
+
+    for theme in colors:
+        pairs = [(name, name + "-bg") for name in ("danger", "caution", "low", "safe", "brand", "spark")]
+        pairs += [("text", bg) for bg in ("bg", "card", "surface", "code", "code-hit")]
+        pairs += [("muted", bg) for bg in ("bg", "card", "surface", "code", "code-hit")]
+        for fg, bg in pairs:
+            a, b = sorted([luminance(theme[fg]), luminance(theme[bg])])
+            assert (b + .05) / (a + .05) >= 4.5, (fg, bg, theme[fg], theme[bg])
+
+
+def test_risk_mapping_legacy_fallback_and_unverified_state_are_present():
+    page = report_page.PAGE
+    for level in ("none", "low", "medium", "high"):
+        assert f'.risk-{level}' in page and f'{level}: "risk-{level}"' in page
+    assert 'Array.isArray(d.signal_items)' in page
+    assert 'for (const text of d.signals)' in page
+    assert '.unverified { color: var(--caution); background: var(--caution-bg); }' in page
+    assert 'e.verified ? "verified" : "unverified"' in page
+    assert 'prefers-reduced-motion: reduce' in page
+    assert '[hidden] { display: none !important; }' in page
 
 
 def test_public_report_shows_code_and_story():

@@ -183,8 +183,12 @@ def _when(value: datetime | str) -> datetime:
 
 def diff_summary(report: diff.DiffReport) -> dict:
     """What the report page shows about the version comparison."""
+    ordered = sorted(report.signals, key=lambda s: (not (s.new or report.previous is None), -diff.SEVERITY_RANK[s.severity]))[:10]
+    headlines = report.headline(10)
     return {"risk": report.risk, "previous": report.previous, "added": report.added[:50], "changed": report.changed[:50],
-            "removed": report.removed[:50], "signals": report.headline(10)}
+            "removed": report.removed[:50], "signals": headlines,
+            "signal_items": [{"text": text, "severity": signal.severity, "new": signal.new or report.previous is None}
+                             for text, signal in zip(headlines, ordered)]}
 
 
 def snippets(inv: investigator.Investigation, files: dict[str, bytes], around: int = 4) -> dict[str, dict]:

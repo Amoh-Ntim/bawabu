@@ -1,4 +1,4 @@
-# Bawabu
+# <img src="docs/images/bawabu-mascot-small.png" alt="Bawabu gatekeeper mascot" width="80" height="80" align="absmiddle"> Bawabu
 
 **The gatekeeper between AI coding agents and the packages they install.**
 

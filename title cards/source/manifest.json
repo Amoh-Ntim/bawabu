@@ -1,0 +1,101 @@
+[
+  {
+    "file": "card-1-context.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "text": [
+      "Meta Global AI Developer Hackathon · 26 Oct – 4 Nov 2026",
+      "Bawabu was built",
+      "during this hackathon.",
+      "Before the event: no Bawabu code, repository or service",
+      "(first commit: 27 October)",
+      "Built on: Muse Code · Muse Spark · Muse Spark Open (Meta)",
+      "Modal · Baseten · Supabase · Verdaccio · OSV.dev"
+    ]
+  },
+  {
+    "file": "card-2a-stat.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "text": [
+      "+1,444%",
+      "malicious open-source packages, 2024 → 2025",
+      "Source: OpenSSF, via Google Threat Intelligence"
+    ]
+  },
+  {
+    "file": "card-2b-worm.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "text": [
+      "171 packages",
+      "hit by the Mini Shai-Hulud worm, May 2026",
+      "Source: Cloud Security Alliance"
+    ]
+  },
+  {
+    "file": "card-2c-agent.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "text": [
+      "An ",
+      "AI agent",
+      " added",
+      "a malicious package",
+      "to a real project.",
+      "Source: Google Threat Intelligence"
+    ]
+  },
+  {
+    "file": "card-3-title.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "text": [
+      "Bawabu",
+      "the gatekeeper between AI coding agents",
+      "and the packages they install"
+    ]
+  },
+  {
+    "file": "card-4-results.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "text": [
+      "9 / 9",
+      "attack samples caught, in every run,",
+      "with both models",
+      "0 / 500",
+      "of the most popular npm",
+      "packages blocked",
+      "0.7 s",
+      "for a normal package",
+      "Full results: github.com/Amoh-Ntim/bawabu (eval/RESULTS.md)"
+    ]
+  },
+  {
+    "file": "card-5-end.png",
+    "size": [
+      1920,
+      1080
+    ],
+    "text": [
+      "Bawabu",
+      "npm i -g bawabu",
+      "github.com/Amoh-Ntim/bawabu",
+      "Built during the Meta Global AI Developer Hackathon",
+      "Muse Code · Muse Spark · Muse Spark Open"
+    ]
+  }
+]

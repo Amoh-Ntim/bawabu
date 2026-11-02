@@ -31,6 +31,81 @@ A running record of what we tested, what we found, and how it changes the build.
 
 ---
 
+## 2026-11-02 (Mon): Report page redesign and light title cards
+
+- Implemented `docs/report-page-ui-plan.md`: light/dark themes with saved preference, soft cards and icon headings,
+  tinted verdicts, evidence ring, real metric tiles, confidence bars, severity pills and signal counts, sandbox
+  contact tables, amber unverified evidence, and recent-check pills. The layout stacks at phone width.
+- `diff_summary()` now adds structured `signal_items`; the existing `signals` list stays unchanged. Older reports
+  still show their plain signals and explicitly identify missing comparison data.
+- Validation: **123 service tests passed**, including nonce/CSP, private-registry redaction, both themes' color
+  tokens and 4.5:1 text contrast. JavaScript DOM checks covered blocked/allowed/ask/failed/old reports, live mode,
+  severity sorting, ring counts, network states, theme persistence, denied localStorage and hostile text.
+- Visually inspected the report in Safari in light and dark, including 390 px phone width, and opened the existing
+  hosted date-gated report after deployment. Used local fixtures for uncommon UI states; no fresh paid investigation
+  was needed for the visual redesign.
+- Deployed with `.venv/bin/modal deploy service/modal_app.py`. Both hosted `/r/<id>` and `/live` HTML match the
+  tested local page after nonce replacement; security headers remain restrictive. The concurrent mascot/header
+  change is included in this deployment.
+- Added all **seven light-mode title cards** to `title cards/light mode/`, with 1920 × 1080 PNGs, editable SVGs and
+  `preview.png`. Same wording and layout as the dark set; off-white, dark ink and accessible deep teal match the UI.
+  Re-render with `python3 'title cards/source/render_cards.py' --theme light` (requires Pillow).
+- Suggested video theme: light, to match the new card set. The recording theme remains the author's choice.
+
+---
+
+## 2026-11-02 (Mon): Step 13 (part 10) — the mascot on the report page
+
+- The report page header shows the **Bawabu mascot** instead of the building icon, on a light tile so its dark
+  outlines stay visible in the dark theme. It's also the browser tab icon.
+- The page's security policy blocked every image, so the service now serves the mascot itself at `/mascot.png` and the
+  policy allows images from the service only (`img-src 'self'`). Nothing loads from outside.
+- The image is a 96 × 96 PNG (13 KB) kept as base64 in `service/bawabu_service/brand.py`, because Modal ships only
+  `.py` files from the package.
+- Tests: the page loads exactly one thing (`/mascot.png`, as the image and the tab icon), the policy includes
+  `img-src 'self'`, and `/mascot.png` is served as a PNG. **123 passed.** Checked by eye in both themes with headless
+  Chrome.
+- Deployed together with the report page redesign on 2 November; see the entry above.
+
+---
+
+## 2026-11-02 (Mon): Step 13 (part 9) — report page UI plan
+
+**`docs/report-page-ui-plan.md`**: making the report page readable at a glance, mostly with colour, before the video is
+recorded. Nothing changed in the code yet.
+- One colour scale for the whole page: danger red, caution amber, a new "low" blue, safe green. Teal stays Bawabu's own
+  colour, violet stays Spark's.
+- Must do: coloured static-risk badge (none, low, medium, high: the code says "medium", not "moderate"), a severity
+  dot on each signal, a tinted verdict banner with ✕ ✓ ?, coloured sandbox rows.
+- **Found while planning:** "unverified" evidence shows in the same green as "✓ verified" (both use `.ok`). The plan
+  fixes it.
+- Signals reach the page without their severity, so `diff_summary()` gets a new `signal_items` list. Old reports in
+  Supabase don't have it, so the page falls back to the plain list.
+- Shipping needs only `modal deploy service/modal_app.py`: old report links get the new look, and npm needs no new
+  version.
+- **Update (same day):** the plan now covers a full new look, based on two reference dashboards: soft rounded cards,
+  icon titles with subtitles, tinted pills, stat tiles, an evidence ring, a signals-by-severity bar, and **light and
+  dark themes** (follows the system, sun / moon switch, remembered). Light and dark colour values for every level,
+  AA contrast. Only real data on the page: no decorative charts. Sections and behaviour unchanged. Time box about 4 h,
+  colour first.
+
+---
+
+## 2026-11-02 (Mon): Step 13 (part 8) — title cards plan and mascot
+
+**`docs/title-cards-plan.md`**: the still images for the video, ready to make in Keynote, Slides or Canva.
+- **Seven cards** (context, three problem numbers, the Bawabu title, results, end card). Text, layout and timing match
+  `demo-video-guide.md` (checked against its plan at a glance). The context card's "first commit: 27 October" checked
+  against `git log`.
+- One shared style: 1920 × 1080, dark navy with white, grey and teal (the report page's colours), one sans-serif font.
+- The overlays that are video-editor labels, not cards (hook caption, lower-thirds, "Harmless test package",
+  "2× speed", captions).
+- **Mascot:** a friendly gatekeeper (*bawabu* is Swahili for gatekeeper), flat and simple so it still reads small, on a
+  transparent background, used only on the title card, the end card, the README header and the X post. Time-boxed to
+  30–60 minutes **after** recording. The cards work without it.
+
+---
+
 ## 2026-11-02 (Mon): Step 13 (part 7) — the demo video guide
 
 **`docs/demo-video-guide.md`**: everything needed to record the 3-minute video.
