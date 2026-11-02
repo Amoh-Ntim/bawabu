@@ -872,6 +872,7 @@ story += [
         [code("verdaccio/config.yaml"), "The private registry's settings: a password for every download, and everything else passed on to the real npm."],
         [code("modal_verdaccio.py"), "Tells Modal how to run the private registry, and where it keeps the uploaded parcels (a Modal volume)."],
         [code("publish.sh"), "Uploads every practice parcel to the private registry with the password from .env. Never to the real npm."],
+        [code("reset_demo.py"), "Makes the hosted office forget the practice parcels (only those), so the demo can be recorded more than once."],
     ], [48, 126], first_bold=False),
     P("Outside the folder", h2t),
     table([

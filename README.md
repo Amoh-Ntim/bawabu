@@ -431,6 +431,7 @@ Tools for looking at one package from your machine (most need `.env`; see [`.env
 | `uv run service/scripts/run_screener.py --lab <pkg>` / `--discover 8` | The quick checks and the screener |
 | `uv run eval/run_lab.py --model meta\|open` | The test-lab evaluation |
 | `uv run eval/run_popular.py --top 500` | The false-positive evaluation on popular packages |
+| `uv run testlab/reset_demo.py [pkg ...] [--yes] [--warm]` | Make the hosted service forget practice packages, so a demo can be recorded again (dry run without `--yes`) |
 
 ### Repository layout
 

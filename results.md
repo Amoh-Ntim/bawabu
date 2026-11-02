@@ -31,6 +31,54 @@ A running record of what we tested, what we found, and how it changes the build.
 
 ---
 
+## 2026-11-02 (Mon): Step 13 (part 7) — the demo video guide
+
+**`docs/demo-video-guide.md`**: everything needed to record the 3-minute video.
+- What the video must do (rules, honesty rules, which moment answers which judging category), and a plan at a glance.
+- One-time setup (a hint-free demo project `~/payments-dashboard` whose `.npmrc` points at the test lab, the screen
+  layout) and a pre-flight for every take (`reset_demo.py ci-build-cache-helper --yes --warm`, reload `/live`).
+- The script, segment by segment: what's on screen, what to do, what to say. The live demo is a table matching each
+  stage of the real investigation to its line. Plus a B-roll shot list with exact commands and report URLs (the
+  open-weights color-hex-convert report for Muse Spark Open, the prompt injection and the hard rules), editing notes,
+  voiceover tips, troubleshooting, the source of every spoken number, the submission text and an X post.
+- **Voiceover trimmed from 426 to 387 words: 2:34–2:45 at a calm 140–150 words a minute**, leaving room for silent beats.
+- Timings come from real hosted runs: about 23–45 s for ci-build-cache-helper's investigation on a warm service, CI
+  re-run included.
+- **Open risk:** all end-to-end tests used `muse exec`; the guide asks for one rehearsal in interactive Muse Code first,
+  with `muse exec` as the fallback.
+- **Update (same day):** following the organisers' guidance, the video now **opens with what existed before the event**
+  (0:00–0:09): a context card (no Bawabu code, repo or service before the event, with the first commit on 27 October
+  after the 26 October kickoff; the existing tools it builds on: Muse Code, Muse Spark, Muse Spark Open, Modal, Baseten,
+  Supabase, Verdaccio, OSV) plus one spoken line. To make room, the hook was tightened and the closing "built during this
+  hackathon" line dropped (the end card still says it). Voiceover: **390 words, 2:36–2:47**.
+- **`docs/demo-video-guide.pdf`** (10 pages), built by `docs/make_video_guide.py` (Markdown, then styled HTML, then
+  headless Chrome's print to PDF; the lines to say are highlighted in green). Checked page by page.
+
+---
+
+## 2026-11-01 (Sun): Step 13 (part 6) — demo reset for retakes
+
+**Why:** verdicts are cached (block: 30 days) and a finished investigation is reused for 24 h, so a second take of the
+same practice package would be an instant "BLOCKED" with nothing on `/live`.
+
+**`testlab/reset_demo.py [pkg ...] [--yes] [--force] [--warm]`** (talks to Supabase's REST API with the secret key from `.env`):
+- Deletes the **test-lab packages'** cached verdicts and their investigations from the last 24 h (the reuse window;
+  imported from the service so they stay in sync). Their event streams go with them (cascade).
+- **Safety:** filters on the test lab's registry address, so public-npm verdicts can't be touched, and refuses names
+  that aren't practice packages; dry run unless `--yes`; never deletes investigations linked from the README, or running
+  ones unless `--force`.
+- `--warm` wakes the hosted service and the practice registry afterwards, so the first take doesn't hit a cold start.
+
+**Verified on the hosted service:** the dry run listed 7 cached practice verdicts and no recent investigations;
+`reset_demo.py react --yes` refused. Take 1: reset → `/check ci-build-cache-helper` ran a **fresh investigation**
+(`a40c3ea6`, 45 s). Take 2: the reset found and deleted that verdict and the take-1 investigation, warmed up, and
+the next `/check` ran **another fresh investigation** (`6529c35a`, 27 s warm). The README's report for the same package
+(`89265f12`) still returns 200.
+
+Local mode needs nothing: `run_local.py` keeps everything in memory, so restarting it resets it.
+
+---
+
 ## 2026-11-01 (Sun): Step 13 (part 5) — on npm
 
 - **Published by the user:** `bawabu@0.1.0` on npm (created 2026-11-01 17:12 UTC; maintainer amoh_ntim; MIT; 16 files).
