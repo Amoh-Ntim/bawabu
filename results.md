@@ -35,7 +35,11 @@ A running record of what we tested, what we found, and how it changes the build.
 
 - Posted: https://youtu.be/poZY6OTK4-U, titled "Bawabu: a gatekeeper for the packages AI coding agents install |
   Meta Global AI Developer Hackathon". YouTube's oEmbed returns it without signing in (HTTP 200), so judges can open it.
-- README's "Demo video" line now links to it. Still to do: make the GitHub repo public, submit, post on X.
+- README's "Demo video" line now links to it.
+- Repo made **public** (default branch `main` = `ad1dc59`). Commit `47b0c34` had removed `docs/` (including the README's
+  two images) and `title cards/`; `docs/` is back, `title cards/` stays out (nothing links to it). Every README link and
+  image checked signed-out: all load (npmjs.com answers 403 to scripts only; the registry shows `bawabu` 0.1.1).
+- Still to do: submit on Cerebral Valley, post on X.
 
 ---
 
