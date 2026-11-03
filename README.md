@@ -10,7 +10,7 @@ found, with evidence that Bawabu checks before trusting.
 
 Built for the **Meta Global AI Developer Hackathon** (Indie track, *Push the Frontier*), by Samuel Amoh Ntim.
 
-**Demo video (3 min):** *link to be added with the submission* · [what it shows, and what didn't fit](#the-demo-video)
+**Demo video (3 min):** [youtu.be/poZY6OTK4-U](https://youtu.be/poZY6OTK4-U) · [what it shows, and what didn't fit](#the-demo-video)
 
 | | |
 |---|---|

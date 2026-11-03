@@ -31,6 +31,14 @@ A running record of what we tested, what we found, and how it changes the build.
 
 ---
 
+## 2026-11-03 (Tue): demo video on YouTube
+
+- Posted: https://youtu.be/poZY6OTK4-U, titled "Bawabu: a gatekeeper for the packages AI coding agents install |
+  Meta Global AI Developer Hackathon". YouTube's oEmbed returns it without signing in (HTTP 200), so judges can open it.
+- README's "Demo video" line now links to it. Still to do: make the GitHub repo public, submit, post on X.
+
+---
+
 ## 2026-11-03 (Tue): first cut of the demo video, reviewed frame by frame
 
 - `bawabu meta ai.mp4`: 2:57, 1080p, 29.97 fps, AAC stereo. Audio −18.2 LUFS integrated, true peak −3.5 dBFS, no
