@@ -160,3 +160,9 @@ def test_live_feed_is_off_unless_turned_on():
 
 def test_a_failed_sandbox_run_is_never_shown_as_clean():
     assert "!rep.error && !(rep.network || []).length" in report_page.PAGE
+
+
+def test_live_can_leave_out_earlier_checks_for_a_recording():
+    page = report_page.PAGE
+    assert 'new URLSearchParams(location.search).has("fresh")' in page
+    assert "onlyNew ? all.filter(" in page

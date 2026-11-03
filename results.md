@@ -31,6 +31,51 @@ A running record of what we tested, what we found, and how it changes the build.
 
 ---
 
+## 2026-11-03 (Tue): first cut of the demo video, reviewed frame by frame
+
+- `bawabu meta ai.mp4`: 2:57, 1080p, 29.97 fps, AAC stereo. Audio −18.2 LUFS integrated, true peak −3.5 dBFS, no
+  silence over 1.5 s. Order: title card, card 1, hook, cards 2a–2c, live demo (1:09–2:26), report B-roll, card 4,
+  B7, card 5. Card 3b, B1 and B9 left out. Split-screen text is readable at 1080p; no secrets on screen.
+- **What the agent actually did in Take A** (Muse session `01a1a05e…`, before the registry login): it read
+  `.muse/*`, saw a "package gatekeeper configured for this project", read Bawabu's own `dist/cli.js`, and ran
+  `bawabu scan ci-build-cache-helper` itself. The service investigated and blocked; the agent didn't install. The hook
+  never had to stop an `npm install`, so a voiceover saying "the agent runs npm install and Bawabu stops it" doesn't
+  match the picture.
+- **After the registry login** (session `01a1a0b0…`), the agent `npm pack`ed the tarball to `/tmp`, read
+  `scripts/cache.js` and refused on its own: this fixture is easy for a capable agent to catch when it can read the
+  code. So the login from the entry below makes a retake *less* likely to show Bawabu; Take A is the better footage.
+- Editing notes given: match V5a/V5b to the scan, slow the investigation (1:39–1:56) back to 1× and pay for it by
+  cutting the agent's thinking (1:13–1:30), replace the screen-recorded cards (mouse cursor visible) with the PNGs, add
+  "2× speed", "Muse Code" and "Harmless test package" labels, move "Bawabu Live Report" to the start of the split
+  screen, raise the audio about 3 dB.
+- All five Muse runs today in `payments-dashboard`: (1) no `.npmrc` yet → public npm 404, no change; (2) the video
+  run → `bawabu scan`, blocked; (3, 4) no registry login → stopped and asked; (5) with the login → `npm pack`, read
+  the code, refused. In none did the agent run `npm install` straight away (Muse Code 1.4.14, Auto-review mode).
+- Judges' rule (organisers): the video is cut off at 3:00, and judges read the README. So anything that doesn't fit
+  goes in the README: added **"The demo video"** section (what the live demo shows, that the hook doesn't rely on the
+  agent asking, the four runs above as "why not leave it to the agent?", and the same package's report link, since the
+  one on screen, `d63f2523…`, was deleted by the reset). The four README report links were checked: all live.
+
+---
+
+## 2026-11-03 (Tue): demo rehearsal — the agent stopped at the registry login
+
+- A real Muse run with the backup prompt ("Run npm install ci-build-cache-helper …") still never reached the install.
+  Muse's session log shows it ran only `npm view` on the test lab (E401, no login on this Mac) and on the public npm
+  (E404), then stopped and asked for registry auth or another source. No install, so no hook check and nothing on
+  `/live`. The earlier "remaining risk" happened even with the backup prompt, so a prompt alone can't avoid it.
+- `package.json` had also gone missing from the demo project again; restored with `npm init -y`.
+- Fix for recording: log this Mac in to the test lab once, at user level (`npm login --registry=<lab>
+  --auth-type=legacy`), so the project's `.npmrc` still shows only the registry line. The CLI never reads or sends
+  npm credentials (checked: no `_auth`/`_authToken` handling in `cli/src`); the service still downloads with its own
+  login. Writing the login into `~/.npmrc` from Claude Code was refused by the safety check, so it's a manual step.
+- The agent may now quote the fixture's description ("Bawabu test fixture #2 … harmless"); the on-screen "Harmless
+  test package" label covers that. New backup prompt answers the agent's trust question up front ("It's our team's
+  build-cache helper, on our private registry (already set up in .npmrc)").
+- Recording script (setup step 4, step 6, troubleshooting) and video guide updated; both PDFs regenerated.
+
+---
+
 ## 2026-11-02 (Mon): Report page redesign and light title cards
 
 - Implemented `docs/report-page-ui-plan.md`: light/dark themes with saved preference, soft cards and icon headings,
@@ -51,6 +96,29 @@ A running record of what we tested, what we found, and how it changes the build.
   `preview.png`. Same wording and layout as the dark set; off-white, dark ink and accessible deep teal match the UI.
   Re-render with `python3 'title cards/source/render_cards.py' --theme light` (requires Pillow).
 - Suggested video theme: light, to match the new card set. The recording theme remains the author's choice.
+
+---
+
+## 2026-11-03 (Tue): demo rehearsal — why /live stayed empty
+
+- The demo project (`~/Desktop/payments-dashboard`) had only `.muse/` from `bawabu init`: no `package.json`, no
+  `.npmrc`. With no `.npmrc`, the agent looked on the public npm (`npm view`, `npm search` → 404), concluded the package
+  doesn't exist, and made no changes. Those aren't installs, so the hook (which ran on every command, per Muse's
+  session log) correctly let them through; no install meant no check and nothing on `/live`.
+- Fixed by finishing the setup: `npm init -y`, the one-line `.npmrc` pointing at the test lab, `git init`.
+- **Remaining risk:** the test-lab registry needs a login, so if the agent researches with `npm view` first it gets
+  E401 ("npm login") and may stop to ask. Adding the login to `.npmrc` would fix that but show the fixture's description
+  ("Bawabu test fixture #2: payload gated on CI=true") on screen. Backup prompt that goes straight to the install:
+  "Our CI builds are slow. Run npm install ci-build-cache-helper to add our team's build-cache helper to this project."
+- Verified the chain from the demo project by sending the hook exactly what Muse sends for `npm install
+  ci-build-cache-helper`: blocked after a live 69 s investigation (CI=true re-run, leaked canary), with the evidence and
+  report link. Then reset with `reset_demo.py` so the first take is fresh.
+- **`/live?fresh`** (deployed): a recording mode that leaves out the checks from before the page was opened. Plain
+  `/live` showed a row of past checks, including `ci-build-cache-helper … BLOCKED`, which would give the outcome away
+  on screen; the reset can't remove them all (the README's CI report is protected). Plain `/live` keeps the row for
+  visitors. Checked both with headless Chrome against the hosted service; 141 Python tests pass.
+- The recording script and video guide now use `/live?fresh`, the real project path (`~/Desktop/payments-dashboard`),
+  the backup prompt, and two new troubleshooting rows ("npm login" error; "doesn't exist on the public npm").
 
 ---
 
@@ -105,6 +173,9 @@ published.
 **Redeployed as v16 (10:10 GMT): live and verified.** The only web container now runs v16; `/check` returns the new
 manifest note, `/live` has the failed-run fix, `left-pad` is still allowed in about a second, and the README's CI
 report still opens.
+
+**CLI 0.1.1 on npm** (published 10:15 GMT, tagged `latest`). The registry's checksum (`9050143…`) matches the tested
+local build byte for byte. It took about 20 minutes to show up in the public registry.
 
 **Claims narrowed everywhere** (README, npm page, explainer PDF, title cards 3b/3c/4, video guide, recording script):
 "only if it's safe" → "only when it finds no evidence of harm"; "every install" → "the installs it can see";

@@ -306,6 +306,8 @@ footer { display: flex; justify-content: space-between; color: var(--muted); fon
   const MODELS = { "muse-spark-1.3": "Muse Spark (Meta Model API)", "meta-models/muse-spark-open-1026": "Muse Spark Open (open weights, Baseten)" };
   const QUIET = new Set(["read_file", "list_files", "get_metadata", "get_diff"]);
   const follow = location.pathname.replace(/\/+$/, "") === "/live";
+  // /live?fresh (for recording a demo): leave out the checks from before the page was opened.
+  const onlyNew = new URLSearchParams(location.search).has("fresh");
   const pageOpened = Date.now() / 1000;
   let currentId = follow ? null : decodeURIComponent(location.pathname.split("/").filter(Boolean).pop() || "");
   let shown = 0, t0 = null, lastStatus = null;
@@ -509,7 +511,8 @@ footer { display: flex; justify-content: space-between; color: var(--muted); fon
   async function followLatest() {
     const res = await fetch("/investigations?limit=8", { cache: "no-store" });
     if (!res.ok) { $("notice").hidden = false; $("notice").textContent = "The live feed is turned off on this service. Open a report link (/r/<id>) instead."; return; }
-    const rows = await res.json();
+    const all = await res.json();
+    const rows = onlyNew ? all.filter((r) => Date.parse(r.created_at) / 1000 > pageOpened - 5) : all;
     const nav = $("recent"); nav.hidden = !rows.length;
     nav.replaceChildren(...rows.map((r) => { const state = r.status === "running" ? "running" : (r.verdict || r.status); const a = el("a", (r.id === currentId ? "current " : "") + state); a.append(el("span", "dot"), el("span", null, `${r.name}@${r.version}  ${({block:"BLOCKED",allow:"ALLOWED",ask:"NEEDS A HUMAN",running:"RUNNING",failed:"FAILED"})[state] || state.toUpperCase()}`)); a.href = "/r/" + encodeURIComponent(r.id); return a; }));
     const newest = rows[0];
