@@ -10,7 +10,7 @@ found, with evidence that Bawabu checks before trusting.
 
 Built for the **Meta Global AI Developer Hackathon** (Indie track, *Push the Frontier*), by Samuel Amoh Ntim.
 
-**Demo video (3 min):** [youtu.be/poZY6OTK4-U](https://youtu.be/poZY6OTK4-U) · [what it shows, and what didn't fit](#the-demo-video)
+**Demo video (3 min):** [youtu.be/y9sO11_Py_Y](https://youtu.be/y9sO11_Py_Y) · [what it shows, and what didn't fit](#the-demo-video)
 
 | | |
 |---|---|
@@ -68,30 +68,33 @@ to `.invalid` addresses, which can never exist on the internet ([how the test la
 
 Three minutes is short, so this is what the video shows and what it had no room for.
 
-**The live demo.** A fresh project with Bawabu set up, and Muse Code asked to `npm install ci-build-cache-helper`, our
-practice package that only steals the npm token on a CI server. Before installing, the agent read the project's
-`.muse/` settings, saw a package gatekeeper there, and checked the package with `bawabu scan`. Bawabu's first sandbox
-run saw nothing. Muse Spark read the install script, noticed the `CI=true` gate, re-ran the sandbox as a CI server and
-watched the fake npm token leave: blocked, with the evidence. The agent told the user and didn't install it. The
-waiting is sped up in the video; the whole check took under a minute. The report link on screen was cleared when we
-reset the demo for retakes; [here is the same package's report](https://amohntim123--bawabu.us-east.modal.run/r/89265f12-1cd0-44b2-a5d2-cc31fe7720ce).
+**The live demo.** A project is set up with `npm i -g bawabu` and `bawabu init`, and Muse Code is told to
+`run npm install ci-build-cache-helper`, our practice package that only steals the npm token on a CI server. The agent
+runs `npm install`, and the hook pauses the command before it runs (`Hooks running · PreToolUse` on screen). Bawabu's
+first sandbox run saw nothing. Muse Spark read the install script, noticed the `CI=true` gate, re-ran the sandbox as a
+CI server and watched the fake npm token leave: blocked, with the evidence. The agent told the user and didn't install
+it. The demo is one real, uncached run, and the zoomed shots come from [its report](https://amohntim123--bawabu.us-east.modal.run/r/b3db3392-700e-4514-a217-4d87117285bf).
+The waiting is sped up and labelled; the hook held the install for about 47 s. The footage behind the statistics near
+the start is from an earlier rehearsal.
 
-**The agent doesn't have to ask.** In the video the agent chose to check first. When an agent just runs
-`npm install`, the hook stops the command before it runs and does the same check: [What it looks like](#what-it-looks-like)
-shows a Muse Code agent's install of `date-fns-lite-utils` stopped that way, and the message it got.
+**Why the prompt is so plain.** The hook only fires on an install. Given that bare instruction, the agent ran
+`npm install` straight away in all 3 test runs and in this take. When we added a reason ("our CI builds are slow, it's
+our team's helper"), it looked the package up first: in the 4 runs that finished, it downloaded the package, read it
+and refused on its own, without reaching Bawabu. So we used the plain prompt to show the hook, and the voiceover gives
+the reason for the install. Those test runs used `muse exec`, on a machine logged in to the test registry.
 
 **Why not leave it to the agent?** While rehearsing on 3 November, we gave Muse Code the same request in the same
-project four times, and it did something different each time. Twice it stopped because it couldn't read the package
-(the test registry needs a login). Once it asked Bawabu (the run in the video). Once, with registry access, it
-downloaded the package without installing it, read the install script and refused. Agents can be careful, but not the
-same way twice, and only about what they can read; our practice packages also describe their trick in a comment, which
-made that reading easier than it would be with real malware (see [Limits](#limits)). Bawabu checks every install
-whether or not the agent thinks to, and runs the package in a sandbox, so the verdict rests on what the package did,
-not only on what its code looks like.
+project four times, and it did something different each time. Twice it stopped because it couldn't read the package.
+Once it asked Bawabu with `bawabu scan`. Once, with registry access, it downloaded the package without installing it,
+read the install script and refused. Agents can be careful, but not the same way twice, and only about what they can
+read; our practice packages also describe their trick in their description and comments, which made that reading easier
+than it would be with real malware (see [Limits](#limits)). Bawabu checks the install commands it can see, whether or
+not the agent thinks to ask, and runs the package in a sandbox, so the verdict rests on what the package did, not only
+on what its code looks like.
 
-**What else didn't fit.** Normal packages are cleared by the quick checks in 0.7 s, made-up names are blocked in about
-a second with a "did you mean", and Muse Spark Open screens flagged packages in a few seconds before any full
-investigation: see [Each layer in detail](#each-layer-in-detail) and [Results](#results).
+**What else didn't fit.** Made-up names are blocked in about a second with a "did you mean", Muse Spark Open can run the
+whole investigation with `--open-weights`, and there are more practice attacks, such as a time bomb and a hijacked
+release: see [What it looks like](#what-it-looks-like), [Each layer in detail](#each-layer-in-detail) and [Results](#results).
 
 ---
 

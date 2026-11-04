@@ -31,6 +31,43 @@ A running record of what we tested, what we found, and how it changes the build.
 
 ---
 
+## 2026-11-04 (Wed): final demo video on YouTube
+
+- Posted: https://youtu.be/y9sO11_Py_Y (YouTube oEmbed 200), 2:54, 1080p, replacing https://youtu.be/poZY6OTK4-U.
+- Built from the take below with ffmpeg and a Python render script. Cold open on the blocked report, the problem over
+  agent footage, the real commit history back to 27 October, the demo with zooms on the three evidence moments,
+  architecture with each stage highlighted, results, and an end card with `npm i -g bawabu && bawabu init`.
+- Voice: recorded in one pass (4:20), pauses tightened, sped up 1.18×, normalised to -16 LUFS. Music: "Mirage" at 7%,
+  about 19 dB under the voice, looped once at about 2:23. A transcript of the finished video has all 27 lines. Whether it
+  sounds natural was left to the user to judge by ear.
+- Still to do by the user: put the new link in the submission form, and check YouTube Studio for a music claim.
+
+## 2026-11-04 (Wed): new demo take, and which prompts reach the hook
+
+**The take** (`video/Screen Recording 2026-11-04 at 2.57.55 PM.mov`, 2:40, no audio, not committed): `npm i -g bawabu`,
+`bawabu init`, then `run npm install ci-build-cache-helper` in Muse Code. The agent reached `npm install` about 15 s after the
+prompt, the hook held it for about 47 s (`Hooks running · PreToolUse` on screen) and blocked it, and the agent reported the
+evidence and didn't install. A real, uncached run: hook log `cached: false`, report `b3db3392-700e-4514-a217-4d87117285bf`,
+5 / 5 evidence verified, 2 sandbox runs, the hard rule fired. This is the first footage of the hook itself stopping the
+install; the agent in the first cut's take asked Bawabu with `bawabu scan`.
+
+**Which prompts reach the hook** (`muse exec`, test-lab package, this Mac logged in to the lab unless stated):
+
+| Prompt | Reached the hook |
+|---|---|
+| `Run npm install ci-build-cache-helper` | **3 of 3** |
+| The long prompt and the backup prompt (2 runs each, finished) | 0 of 4: downloaded and read the package, refused |
+| Two story prompts and two command-first prompts (2 runs each; stopped when the session restarted) | 0 of 8 by then, 2 of them finished |
+| "Run this exact command and nothing else…", plus the story (stopped early) | 1 of 2 |
+| **The long prompt, without the lab login** (simulated with an empty npm config; stopped early) | **2 of 2**, after E401s on the agent's lookups |
+
+These are small samples, and the runs stopped early have no final answer. The hook only fires on installs, so an agent
+that looks the package up and refuses never reaches it. The fixture's description says `Bawabu test fixture #2: payload
+gated on CI=true`, and the agents quote it.
+
+Also found: an install answered from Bawabu's memory shows nothing on `/live` (hook log `cached: true`), and `/live?fresh`
+only hides old checks when the address ends in exactly `?fresh`.
+
 ## 2026-11-04 (Wed): README setup followed from a fresh public clone
 
 Followed the README as a judge would, after the organisers confirmed judges work from the README and the video. Public
