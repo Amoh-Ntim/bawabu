@@ -31,6 +31,60 @@ A running record of what we tested, what we found, and how it changes the build.
 
 ---
 
+## 2026-11-04 (Wed): README setup followed from a fresh public clone
+
+Followed the README as a judge would, after the organisers confirmed judges work from the README and the video. Public
+clone of `main` at `6cc2383`, CLI 0.1.1 from npm (in a private folder, not with `-g`).
+
+| Check | Result |
+|---|---|
+| Hosted, no keys: `bawabu scan react-datepickr` | ⛔ blocked, "did you mean react-datepicker?", 6 s (first call) |
+| Hosted, no keys: `bawabu scan left-pad` | ✅ allowed, 2 s |
+| `uv sync`, `uv run service/run_local.py` | Clean; the service answered in about 6 s |
+| `--local`: `react-datepickr` / `left-pad` | ⛔ 1 s / ✅ 2 s |
+| `--local --lab`: `ci-build-cache-helper` / `color-hex-convert` | ⛔ 18 s / ⛔ 10 s, with evidence and report links |
+| `--local --lab`: `pretty-log-kit` (honest) | ✅ allowed, 16 s |
+| `bawabu demo` | Project created, hook installed, self-test passed, service reachable |
+
+Not run in this check: a Muse Code session in `bawabu-demo` and a sandbox investigation on the hosted service.
+
+### Local practice cases, sandbox off, both models
+
+All 13 cases on the local service from the fresh clone, three at a time, then repeats of the case that went wrong.
+
+| Model | Result | Time per case |
+|---|---|---|
+| Muse Spark | **12 / 13**: `markdown-tiny-render` came back "ask" (it couldn't examine the dependency), not blocked | 14–38 s for investigations |
+| Muse Spark Open | **13 / 13** | 8–28 s for investigations |
+
+**A wrong "allow".** In the log check, run before these passes, `bawabu scan string-format-pro-utils --local --lab
+--open-weights` **allowed the malicious package**, with a reason that described the credential theft and evidence
+calling the address a "dead sink". The sample only sends to a `.invalid` address, which may be why; a later run's reason
+says "even though sink domain is a test *.invalid, the behavior is credential theft". The repeats:
+
+| `string-format-pro-utils`, sandbox off | Blocked | Allowed |
+|---|---|---|
+| Muse Spark Open, 5 runs | 4 | **1** |
+| Muse Spark, 3 runs | 3 | 0 |
+
+No hard rule catches this locally, because the leaked-canary rule needs a sandbox run. With the sandbox on, the 9
+evaluation runs caught every malicious package. **Not fixed**: a guard against an "allow" whose own reason describes theft
+would be a code change, so it's the user's decision. Earlier local testing (13 / 13 with Muse Spark, 0–18 s) was one run,
+so the README now reports these results and has a new Limits entry.
+
+### Logs, each one produced and found for real
+
+| Log | Check | Result |
+|---|---|---|
+| `/investigations` and `/investigations/<id>` | Local and hosted | `model` shows `muse-spark-1.3` or `meta-models/muse-spark-open-1026`, with every tool call and result |
+| `/r/<id>`, `/live` | Hosted | 200 |
+| Screener | `docs-gen-postinstall@1.0.0` local; `string-format-js` hosted, no keys | "Cleared by Bawabu's open-weights screener (Muse Spark Open)" |
+| `~/.local/state/bawabu/checks.jsonl` | The hook called as Muse calls it, with a separate `HOME` | Exit 2, one line with the command, decision, verdicts and reasons; `bawabu scan` doesn't write here |
+| Muse session logs | A real 30 Oct session | `hook_run_terminal`, status `blocked`, exit code 2, stderr "Blocked by Bawabu"; `model_id` `muse-spark-1.3-contributor` |
+
+The README gained an Architecture section and a Logs section, following the organisers' list, and a section on how
+Modal and Baseten are used, written from `service/modal_app.py`, `runner.py`, `screener.py` and the results above.
+
 ## 2026-11-03 (Tue): demo video on YouTube
 
 - Posted: https://youtu.be/poZY6OTK4-U, titled "Bawabu: a gatekeeper for the packages AI coding agents install |

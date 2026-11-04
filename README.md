@@ -17,10 +17,12 @@ Built for the **Meta Global AI Developer Hackathon** (Indie track, *Push the Fro
 | **Malicious packages caught in our test lab** | **9 / 9** in every one of 9 evaluation runs |
 | **Top 500 npm packages** | **500 / 500 allowed**: no false positives |
 | **Time for a normal package** | **0.7 s** median |
-| **Built on** | Muse Code · Muse Spark (Meta Model API) · Muse Spark Open (Meta's open weights) |
+| **Built on** | Muse Code · Muse Spark (Meta Model API) · Muse Spark Open (Meta's open weights, on Baseten): [model IDs and where each runs](#meta-models) |
 | **Install** | `npm i -g bawabu` ([on npm](https://www.npmjs.com/package/bawabu)) |
 
 **Try it with your own API key** in about five minutes, everything on your machine: [jump to the steps](#try-it-with-your-own-api-key).
+
+**For judges:** [Architecture](#architecture) · [Meta models](#meta-models) · [Built on Meta AI](#built-on-meta-ai) · [Modal and Baseten](#how-we-used-modal-and-baseten) · [Setup](#try-it-with-your-own-api-key) · [Logs](#logs) · [Results](#results) · [Limits](#limits)
 
 ---
 
@@ -89,7 +91,7 @@ not only on what its code looks like.
 
 **What else didn't fit.** Normal packages are cleared by the quick checks in 0.7 s, made-up names are blocked in about
 a second with a "did you mean", and Muse Spark Open screens flagged packages in a few seconds before any full
-investigation: see [How it works](#how-it-works) and [Results](#results).
+investigation: see [Each layer in detail](#each-layer-in-detail) and [Results](#results).
 
 ---
 
@@ -120,7 +122,23 @@ the verdict with the evidence.
 
 ---
 
-## How it works
+## Architecture
+
+### How it works
+
+What happens when a Muse Code agent runs `npm install x`, in order:
+
+1. **The hook stops the command.** Before the agent runs any command, Muse Code calls Bawabu's `PreToolUse` hook
+   (`bawabu check`) on the developer's machine. The hook finds the installs in the command and sends only the package
+   names, versions and registry address to the Bawabu service.
+2. **Quick checks, no AI (about 1 s).** Registry facts, known malware and made-up names settle most packages.
+3. **Screener (a few seconds).** Muse Spark Open reads the code of flagged packages that run nothing at install time,
+   and clears the plainly harmless ones.
+4. **Investigation (30 to 90 s).** The package runs in a locked sandbox baited with fake secrets. Muse Spark reads the
+   code, the version diff and the sandbox report, and can re-run the sandbox under new conditions.
+5. **Bawabu checks the model's work.** Evidence must match what the tools really saw, and hard rules override the model.
+6. **The answer goes back to the hook.** On "allow", the command runs. Otherwise it doesn't, and the agent gets the
+   reason, the evidence and a report link.
 
 ```mermaid
 flowchart TB
@@ -149,6 +167,67 @@ flowchart TB
     screener -- "allow" --> hook
     checks -- "allow / block / ask<br/>+ evidence + report link" --> hook
 ```
+
+### How it's implemented
+
+| Component | What it is | Where it runs | How it connects |
+|---|---|---|---|
+| **CLI and hook** ([`cli/`](cli)) | TypeScript, no runtime dependencies | The developer's machine | Muse Code calls the hook; the hook calls the service's `POST /check` |
+| **Service** ([`service/`](service)) | Python, FastAPI: quick checks, screener, diff engine, investigator, evidence checks | Modal, or your machine with `run_local.py` | Calls the registries, OSV, both model endpoints and the sandbox |
+| **Sandbox X-ray** ([`sandbox/`](sandbox)) | Bait, a fake internet and `strace` in a network-blocked container | Modal sandboxes; off in local runs unless you add `--sandbox` | Started by the service, which gets a report back |
+| **Database** | Verdicts, investigations and their events | Supabase, or memory in local runs | Read and written by the service |
+| **Report page and [logs](#logs)** | `/r/<id>`, `/live` and `/investigations`, plus a log file from the hook | Served by the service; the log file stays on the developer's machine | Read in a browser, with `curl` or from the file |
+| **Test lab** ([`testlab/`](testlab)) | Harmless practice packages | A password-locked Verdaccio registry on Modal, or built into the local service | Read by the service |
+
+### Meta models
+
+Bawabu runs no model on its own compute, on the hosted service or locally. The service calls these two endpoints over
+the network, and Muse Code handles its own model:
+
+| Model | Model ID | Where it runs | What it does in the flow |
+|---|---|---|---|
+| **Muse Spark** | `muse-spark-1.3` | **Meta Model API** (`https://api.meta.ai/v1`) | Step 4, the investigator: an agent with tools that follows leads, decodes payloads and decides when to re-run the sandbox and under which conditions |
+| **Muse Spark Open** (open weights) | `meta-models/muse-spark-open-1026` | **Baseten**, a hosted inference provider (`https://inference.baseten.co/v1`), not the Meta Model API | Step 3, the screener. With `--open-weights`, also step 4 in place of Muse Spark |
+| **Muse Code** | `muse-spark-1.3-contributor` in our sessions (the `model_id` in its [session log](#logs); yours may differ) | The agent runs on the developer's machine and makes its own model calls; Bawabu never calls this model | Step 1: the coding agent Bawabu protects, through its `PreToolUse` hook, tested with real `muse exec` sessions |
+
+How the models did, and more on each one's role: [Built on Meta AI](#built-on-meta-ai).
+
+### Hosting
+
+- **CLI:** on npm as [`bawabu`](https://www.npmjs.com/package/bawabu).
+- **Hosted service:** `https://amohntim123--bawabu.us-east.modal.run`, a FastAPI app on Modal with sandboxes on Modal and
+  the database on Supabase. You don't need it to run Bawabu: [the local setup](#try-it-with-your-own-api-key) runs the
+  service on your machine.
+- **No separate frontend:** the service serves the report and live pages itself.
+
+### Keys
+
+- `META_API_KEY` and `BASETEN_API_KEY` stay with the service: in Modal secrets when hosted, and in your environment or a
+  git-ignored `.env` when local. They're never committed, and [`.env.example`](.env.example) holds no keys.
+- The CLI and the hook hold no model keys. From `.npmrc` they take only the registry address, never a credential. Using
+  the hosted service needs no key at all.
+
+### What isn't ours
+
+All the code in this repository was written during the event, with no earlier code carried over
+([Built during the hackathon](#built-during-the-hackathon)). These are third-party:
+
+| Kind | What | Used for |
+|---|---|---|
+| Services | Modal, Baseten, Supabase | Hosting and sandboxes; serving Muse Spark Open; the database |
+| Public data | npm and PyPI registries, [OSV.dev](https://osv.dev), [npm-high-impact](https://github.com/wooorm/npm-high-impact), [top-pypi-packages](https://github.com/hugovk/top-pypi-packages) | Package facts; known malware; popular names for spotting typos |
+| Software | FastAPI, uvicorn, httpx, `modal`, `packaging`, `semantic-version`, `openai`, Verdaccio, `strace` | Web service; HTTP; Modal client; version rules; model calls; the test-lab registry; sandbox recording |
+
+The `openai` package is only a client library: both model endpoints speak its protocol, and no OpenAI model is used.
+
+### Run it
+
+[Try it with your own API key](#try-it-with-your-own-api-key) runs the project locally from this repo.
+[The hosted option](#or-use-the-hosted-service) needs no keys, and [Logs](#logs) shows how to check what happened.
+
+---
+
+## Each layer in detail
 
 Most packages never get past the first layer. Each layer only sees what the one before couldn't settle:
 
@@ -265,6 +344,46 @@ it in 6 s (Muse Spark: 28 s), and caught the CI-only malware by choosing to re-r
 
 ---
 
+## How we used Modal and Baseten
+
+### Modal: everything that runs in the cloud
+
+Bawabu has to run unknown code, and that can't happen on the developer's machine. Modal gives it a sealed place to do
+that, and hosts the service around it.
+
+| What | How it uses Modal | Code |
+|---|---|---|
+| **The sandbox** | Two Modal sandboxes per run. The first has network access and downloads the package with install scripts off, and `snapshot_filesystem` saves the result. The second starts from that snapshot with `block_network=True` (1 CPU, 1 GiB) and runs the install scripts under `strace`. Each re-run Muse Spark asks for starts this over, in fresh sandboxes | [`runner.py`](sandbox/bawabu_sandbox/runner.py) |
+| **The service** | A FastAPI app served with `@modal.asgi_app`, handling up to 100 requests at once and staying warm for 5 minutes after the last one. After that, the first request takes about 5 s to wake it | [`modal_app.py`](service/modal_app.py) |
+| **Investigations** | A separate Modal function with a 10-minute limit, started with `.spawn()`. It keeps running if the request gives up waiting, which is what lets the agent retry a minute later and get the verdict | [`modal_app.py`](service/modal_app.py) |
+| **The test lab** | Verdaccio in a `@modal.web_server` function, with its packages on a `modal.Volume` | [`modal_verdaccio.py`](testlab/modal_verdaccio.py) |
+| **Keys** | Kept as Modal secrets, never in the repo | [`modal_app.py`](service/modal_app.py) |
+
+One thing we had to work around: Modal manages `/etc/resolv.conf` and reverts changes to it, so the sandbox's fake
+internet couldn't take over DNS that way. A small `LD_PRELOAD` shim ([`dnsshim.c`](sandbox/bawabu_sandbox/dnsshim.c))
+overrides `getaddrinfo` instead, so every hostname resolves to the sink and the intended destination is recorded.
+
+You don't need Modal to try Bawabu: `run_local.py` runs the service on your machine, and `--sandbox` adds just the Modal
+sandbox.
+
+### Baseten: serving Muse Spark Open
+
+We call Baseten's hosted API at `https://inference.baseten.co/v1` with the model ID `meta-models/muse-spark-open-1026`,
+and deploy nothing ourselves. It speaks the same protocol as the Meta Model API, so switching models only changes the
+address, the key and the model ID.
+
+| Job | How it uses Baseten | Code |
+|---|---|---|
+| **The screener** | Called for flagged packages that pass the rules first, with `reasoning_effort: "low"` and a strict JSON schema for the answer. Any error or timeout sends the package on to an investigation | [`screener.py`](service/bawabu_service/screener.py) |
+| **The open-weights investigator** (`--open-weights`) | The same loop and tools as Muse Spark: tool calls, then a strict verdict. See [Limits](#limits) for how it behaves with the sandbox off | [`investigator.py`](service/bawabu_service/investigator.py) |
+
+Speed is why it screens. In our first tests it was about twice as fast as Muse Spark on the Meta Model API, for chat
+(1.5 s vs 2.2–4.4 s) and tool calling (4.2 s vs 7.6–7.7 s), and a screener has to answer in seconds. With the sandbox
+included, full investigations were close: a median of 35.5 s vs 36.8 s in the 2 November evaluation runs. In a local run
+without `BASETEN_API_KEY`, the screener is off and flagged packages go straight to an investigation.
+
+---
+
 ## Results
 
 Full write-up: [eval/RESULTS.md](eval/RESULTS.md). Every package went through the real decision path, the same code
@@ -347,8 +466,8 @@ A real run of the last one:
    Report: http://127.0.0.1:8787/r/inv-1
 ```
 
-Open the report link, or keep http://127.0.0.1:8787/live open to watch each investigation as it happens. Every
-practice package can be checked with `--lab`:
+Open the report link, or keep http://127.0.0.1:8787/live open to watch each investigation as it happens.
+[Logs](#logs) shows where every check is recorded. Every practice package can be checked with `--lab`:
 
 | Practice package | The trick | Expected |
 |---|---|---|
@@ -358,7 +477,7 @@ practice package can be checked with `--lab`:
 | `string-format-pro-utils` | payload hidden as base64 | blocked |
 | `color-hex-convert` | tells AI reviewers to approve it | blocked |
 | `docs-gen-postinstall@2.0.0` | hijacked release (`@1.0.0` is the clean original) | blocked |
-| `markdown-tiny-render` | clean itself, malicious dependency | blocked, but locally only because its own comment names the dependency as the culprit; the sandbox is what really catches it |
+| `markdown-tiny-render` | clean itself, malicious dependency | blocked by the sandbox on the hosted service; locally it can come back "ask" (a human should decide, so it isn't installed), because Bawabu can't see inside the dependency |
 | `fastbundle-bin`, `image-resize-native`, `pretty-log-kit` | honest packages that run code on install | allowed |
 
 The samples are harmless (fake secrets, `.invalid` addresses only), and they never reach your disk: the local test lab
@@ -377,10 +496,11 @@ workspace, so it holds no notes about which packages are malicious.
 
 **What's different from the hosted service.** The sandbox runs on Modal, so locally it's off unless you have a Modal
 account (`uv run modal setup`, then `uv run service/run_local.py --sandbox`), and even then it can only run packages
-from the public npm, not the test lab on your machine. Without it, Muse Spark judges from the code and the version
-diff: on our machine all 13 practice cases still came out right (9 blocked, 4 allowed, 0–18 s each), with the
-CI-gated and time-bomb samples caught from their code. But there's no leaked-canary proof, and the malicious-dependency
-sample was only caught because its own comment gives it away. Investigations are also faster (10–20 s instead of 30–90 s).
+from the public npm, not the test lab on your machine. Without it, the model judges from the code and the version diff
+alone, so there's no leaked-canary proof and verdicts can differ between runs. Running all 13 practice cases locally on
+4 November, Muse Spark got 12 right (`markdown-tiny-render` came back "ask") and Muse Spark Open got 13. But in five runs
+of `string-format-pro-utils`, Muse Spark Open blocked it four times and allowed it once (see [Limits](#limits)).
+Investigations are also faster (about 10–40 s instead of 30–90 s).
 
 Other options: `uv run service/run_local.py --open-weights` investigates with Muse Spark Open instead
 (needs `BASETEN_API_KEY`), and `bawabu scan <pkg> --open-weights` does it for one check.
@@ -425,6 +545,46 @@ Settings live in `.muse/bawabu.json`:
 - `openWeights`: investigate with Muse Spark Open instead of Muse Spark.
 
 To see what Bawabu would check in a command: `bawabu explain "npm i axios && ./setup.sh"`.
+
+---
+
+## Logs
+
+Every check leaves a record. Once you've run the [setup](#try-it-with-your-own-api-key), this is where to find each one:
+
+| To check | Where | What's in it |
+|---|---|---|
+| **What an investigation did** | `http://127.0.0.1:8787/investigations` lists them, newest first. `/investigations/<id>` is one in full, and `/r/<id>` is the same thing as a page (`bawabu scan` prints the link) | The model ID, every tool call and its result, sandbox re-runs, evidence kept and discarded, hard rules, the verdict |
+| **What the screener decided** | The verdict `bawabu scan` prints, and the hook log below | *"Cleared by Bawabu's open-weights screener (Muse Spark Open): …"*. Cleared packages have no investigation entry |
+| **What the hook decided** | `~/.local/state/bawabu/checks.jsonl` on your machine, one line per install the hook saw | The command, the decision, each package's verdict, reason and evidence, and its `report_id` |
+| **What Muse Code recorded** | `~/.local/share/muse/sessions/YYYY/MM/DD/<session>/session.jsonl` | `hook_run_terminal` entries (status `blocked`, exit code 2, the message the agent got) and the agent's `model_id` |
+| **The evaluation runs** | [`eval/results/`](eval/results), committed | For each run, the model and each package's verdict, time, steps, re-runs and evidence |
+
+To see an entry of each kind, with the local service running:
+
+```bash
+# An investigation, and the model that ran it
+bawabu scan ci-build-cache-helper --local --lab
+curl -s http://127.0.0.1:8787/investigations
+curl -s http://127.0.0.1:8787/investigations/inv-1 | python3 -m json.tool | grep '"model"'    # "muse-spark-1.3"
+
+# The screener (needs BASETEN_API_KEY; without it this package goes to an investigation)
+bawabu scan docs-gen-postinstall@1.0.0 --local --lab
+
+# The hook: written when Muse Code runs the hook (step 4 of the setup), not by bawabu scan
+tail -n 1 ~/.local/state/bawabu/checks.jsonl | python3 -m json.tool
+
+# Muse Code's own record: find today's sessions with a block, then read that entry
+grep -l '"status":"blocked"' ~/.local/share/muse/sessions/$(date +%Y/%m/%d)/*/session.jsonl
+grep '"status":"blocked"' <a file from that list>
+```
+
+- **The local service keeps investigations in memory**, so restarting it clears them and `inv-1` starts again. The hook
+  log and Muse Code's session logs are files and stay. The service's terminal stays quiet unless something goes wrong.
+- **On the hosted service,** the same pages are at `https://amohntim123--bawabu.us-east.modal.run`. For packages from a
+  private registry, such as our test lab, they hide the code. To see the screener there with no keys, run
+  `bawabu scan string-format-js`.
+- **Not recorded:** raw model prompts and token counts, and the screener's model ID (only its name appears).
 
 ---
 
@@ -502,6 +662,11 @@ results.md     The lab notebook: every test, result and decision, newest first
 
 Being clear about what Bawabu doesn't do yet:
 
+- **Without the sandbox, a verdict rests on the model's reading.** In a local run with the sandbox off, Muse Spark Open
+  allowed the malicious `string-format-pro-utils` (1 of 5 runs, 4 November), even though its own reason described the
+  credential theft. The sample only sends to a `.invalid` address, which may be why. With the sandbox on, a leaked fake
+  secret blocks whatever the model says, and every malicious package was caught in all 9 evaluation runs. So use the
+  sandbox for real protection: the hosted service has it, and `--sandbox` adds it to a local run for packages on npm.
 - **What the hook can see.** It reads the shell commands the agent runs and the scripts they call, so it protects a
   well-meaning agent from bad packages; it isn't a sandbox around a hostile one. Code that fetches and unpacks a package
   without a package manager (for example from inside a Node program it wrote) can get past it.
